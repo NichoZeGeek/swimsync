@@ -147,7 +147,7 @@ details summary{cursor:pointer;color:var(--acc2);margin:6px 0}
    100 % local : HTML + JS, File System Access API, localStorage, IndexedDB
    ===================================================================== */
 
-const VERSION = '1.2.0';
+const VERSION = '1.2.1';
 const AUDIO_EXT = ['mp3','m4a','aac','ogg','opus','flac','wav','ape','wma'];
 const DEVICE_OK_EXT = ['mp3','flac','wav','ape']; // formats lus par le casque
 const MANIFEST = '_swimsync.json';
@@ -1103,7 +1103,10 @@ function openHelp(){
     SwimSync copie donc les fichiers <b>un par un</b>, ajoute un <b>numéro</b> devant chaque nom, et <b>recrée le dossier</b> quand une suppression ou une réorganisation l'exige.
     Utilise « 🔊 Tester mon casque » dans les réglages pour vérifier l'ordre de lecture du tien.</p>
     <h4>Podcast Addict</h4>
-    <p>Si Chrome refuse de sélectionner le dossier de Podcast Addict (« Android/data/… » est bloqué depuis Android 11), va dans <b>Podcast Addict ➜ Réglages ➜ Téléchargement ➜ Dossier de stockage</b> et choisis un dossier normal (ex. <code>/Podcasts</code>).</p>`, [['OK', closeModal, 'pri']]);
+    <p>Par défaut, Podcast Addict range ses fichiers dans <code>Android/data/…</code>, un dossier que Chrome ne peut pas ouvrir.
+    Dans <b>Podcast Addict ➜ Réglages ➜ Téléchargement ➜ Dossier de stockage</b>, coche l'option de <b>dossier public</b> et accepte le déplacement
+    (il faut autant d'espace libre que la taille de tes téléchargements). Les fichiers sont alors dans un dossier du type
+    <code>Android/media/com.bambuna.podcastaddict/…</code>, que tu peux ajouter ici avec ＋.</p>`, [['OK', closeModal, 'pri']]);
 }
 
 /* ---------------- modale générique ---------------- */

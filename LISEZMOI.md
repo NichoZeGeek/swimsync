@@ -19,7 +19,9 @@ L'accès aux dossiers demande une page servie en **https** (ou localhost) et **C
 - Casque **éteint** avant de le brancher (il apparaît alors comme une clé USB).
 
 ## Podcast Addict
-Depuis Android 11, Chrome ne peut pas ouvrir `Android/data/…`. Dans Podcast Addict : Réglages ➜ Téléchargement ➜ Dossier de stockage ➜ choisis un dossier normal (ex. `/Podcasts`).
+Par défaut, les fichiers sont dans `Android/data/…`, que Chrome ne peut pas ouvrir.
+Podcast Addict ➜ Réglages ➜ Téléchargement ➜ Dossier de stockage ➜ cocher l'option « dossier public » et accepter le déplacement.
+Les fichiers passent alors dans un dossier du type `Android/media/com.bambuna.podcastaddict/`, à ajouter dans SwimSync.
 
 ## YouTube
 Recommandé : l'appli **Seal** (F-Droid ou GitHub, gratuite, basée sur yt-dlp).
