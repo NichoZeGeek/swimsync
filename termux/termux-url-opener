@@ -1,0 +1,12 @@
+#!/data/data/com.termux/files/usr/bin/bash
+# SwimSync – reçoit un lien partagé vers Termux et le télécharge en MP3
+# À placer dans ~/bin/termux-url-opener (chmod +x)
+URL="$1"
+DEST="$HOME/storage/shared/Podcasts/YouTube"
+mkdir -p "$DEST"
+echo "▶ Téléchargement : $URL"
+yt-dlp -x --audio-format mp3 --audio-quality 5 \
+  --embed-metadata --windows-filenames --no-playlist \
+  -o "$DEST/%(upload_date>%Y-%m-%d)s - %(title).90B.%(ext)s" "$URL" \
+  && termux-toast "MP3 prêt dans Podcasts/YouTube" 2>/dev/null
+echo "Terminé. Appuie sur Entrée pour fermer."; read -r

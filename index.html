@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b2a3f">
+<title>SwimSync – podcasts pour la piscine</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<style>
+:root{
+  --bg:#071c2b; --panel:#0b2a3f; --panel2:#0f3550; --line:#1d4a68; --txt:#e6f3fb; --mut:#8fb3c9;
+  --acc:#2bb3e6; --acc2:#7fe0ff; --ok:#3ccf8e; --warn:#ffb547; --bad:#ff6b6b; --sel:#145a80;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font:13px/1.35 system-ui,-apple-system,Roboto,sans-serif}
+button,select,input,textarea{font:inherit;color:inherit}
+button{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:6px 10px;cursor:pointer}
+button:active{transform:scale(.97)}
+button.pri{background:var(--acc);border-color:var(--acc);color:#012;font-weight:600}
+button.dang{background:#5a1f25;border-color:#86333b}
+button.ghost{background:transparent;border-color:transparent;padding:4px 6px}
+button:disabled{opacity:.4}
+select,input[type=text],input[type=url],input[type=number],textarea{background:#06202f;border:1px solid var(--line);border-radius:6px;padding:5px 7px}
+#app{display:flex;flex-direction:column;height:100%}
+header.top{display:flex;align-items:center;gap:8px;padding:6px 10px;background:var(--panel);border-bottom:1px solid var(--line)}
+header.top h1{font-size:15px;margin:0;flex:1;white-space:nowrap}
+header.top h1 span{color:var(--acc2)}
+#banner{display:none;padding:6px 10px;background:#4a3a10;color:#ffe2a8;gap:8px;align-items:center;flex-wrap:wrap}
+#banner.show{display:flex}
+main{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:6px;min-height:0}
+.pane{background:var(--panel);border:1px solid var(--line);border-radius:10px;display:flex;flex-direction:column;min-height:0;min-width:0}
+.pane>.hd{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid var(--line)}
+.pane>.hd b{flex:1;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tools{display:flex;flex-wrap:wrap;gap:4px;padding:6px 8px;border-bottom:1px solid var(--line)}
+.chip{padding:3px 8px;border-radius:20px;font-size:12px}
+.chip.on{background:var(--acc);color:#012;border-color:var(--acc)}
+.list{flex:1;overflow:auto;min-height:0}
+.row{display:flex;align-items:center;gap:6px;padding:6px 8px;border-bottom:1px solid #0c3046;cursor:pointer}
+.row.sel{background:var(--sel)}
+.row .tx{flex:1;min-width:0}
+.row .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .s{color:var(--mut);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row input[type=checkbox]{width:18px;height:18px;flex:none;accent-color:var(--acc)}
+.grp{padding:5px 8px;background:#092537;color:var(--acc2);font-size:12px;font-weight:600;position:sticky;top:0;display:flex;gap:6px;align-items:center;z-index:1}
+.grp span{flex:1}
+.ft{padding:6px 8px;border-top:1px solid var(--line);color:var(--mut);font-size:12px;display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.ft .grow{flex:1}
+.empty{padding:20px 12px;color:var(--mut);text-align:center}
+.empty button{margin-top:10px}
+.dot{width:10px;height:10px;border-radius:50%;background:var(--bad);flex:none}
+.dot.on{background:var(--ok)}
+.dot.wait{background:var(--warn)}
+.crumbs{padding:4px 8px;font-size:12px;color:var(--mut);border-bottom:1px solid var(--line);white-space:nowrap;overflow-x:auto}
+.crumbs a{color:var(--acc2);text-decoration:none;cursor:pointer}
+.lock{font-size:15px;opacity:.35;flex:none}
+.lock.on{opacity:1}
+.badge{font-size:10px;padding:1px 5px;border-radius:6px;background:#244f6b;color:var(--acc2);margin-left:4px}
+.badge.w{background:#5b4310;color:#ffd58a}
+nav.actions{display:flex;gap:6px;padding:6px;background:var(--panel);border-top:1px solid var(--line);flex-wrap:wrap;justify-content:center}
+nav.actions button{flex:1 1 auto;min-width:90px}
+/* modal */
+#modal{position:fixed;inset:0;background:rgba(0,10,20,.7);display:none;align-items:center;justify-content:center;z-index:10;padding:10px}
+#modal.show{display:flex}
+#modal .box{background:var(--panel);border:1px solid var(--line);border-radius:12px;width:min(720px,100%);max-height:100%;display:flex;flex-direction:column}
+#modal .mh{padding:10px 12px;border-bottom:1px solid var(--line);font-weight:700;font-size:15px;display:flex;align-items:center}
+#modal .mh span{flex:1}
+#modal .mb{padding:10px 12px;overflow:auto;flex:1}
+#modal .mf{padding:8px 12px;border-top:1px solid var(--line);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.field{margin:8px 0}
+.field label{display:block;color:var(--mut);font-size:12px;margin-bottom:3px}
+.field .hint{color:var(--mut);font-size:11px;margin-top:3px}
+.q{list-style:none;margin:0;padding:0}
+.q li{display:flex;align-items:center;gap:6px;padding:5px 4px;border-bottom:1px solid #0c3046}
+.q li .n{width:28px;color:var(--acc2);font-weight:700;text-align:right;flex:none}
+.q li .tx{flex:1;min-width:0}
+.q li.dev .t::after{content:" · déjà sur le casque";color:var(--mut);font-size:11px}
+.bar{height:10px;background:#06202f;border-radius:6px;overflow:hidden;border:1px solid var(--line)}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,var(--acc),var(--acc2));width:0}
+.note{background:#0a3149;border-left:3px solid var(--acc);padding:7px 9px;border-radius:6px;margin:8px 0;color:#cfe8f5}
+.note.w{border-color:var(--warn);background:#3a2d0f;color:#ffe2a8}
+pre.code{background:#041520;border:1px solid var(--line);border-radius:6px;padding:8px;overflow:auto;font-size:11px;white-space:pre-wrap;word-break:break-all}
+.plan b.k{color:var(--ok)} .plan b.d{color:var(--bad)} .plan b.c{color:var(--acc2)}
+details summary{cursor:pointer;color:var(--acc2);margin:6px 0}
+.toast{position:fixed;left:50%;bottom:70px;transform:translateX(-50%);background:#093a55;border:1px solid var(--acc);padding:8px 14px;border-radius:20px;z-index:20;max-width:90%;text-align:center}
+@media (max-width:560px){
+  main{gap:4px;padding:4px}
+  .row{padding:6px 5px;gap:4px}
+  .tools{padding:5px}
+  .pane>.hd{padding:5px 6px}
+  nav.actions button{min-width:70px;padding:7px 6px;font-size:12px}
+}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <h1>🏊 Swim<span>Sync</span></h1>
+    <button class="ghost" id="btnHelp" title="Aide">❔</button>
+    <button class="ghost" id="btnSettings" title="Réglages">⚙️</button>
+  </header>
+  <div id="banner"></div>
+  <main>
+    <!-- LEFT: phone -->
+    <section class="pane" id="left">
+      <div class="hd"><b>📱 Téléphone</b>
+        <button class="ghost" id="btnRescan" title="Actualiser">⟳</button>
+        <button class="ghost" id="btnAddSource" title="Ajouter un dossier">＋</button>
+      </div>
+      <div class="tools" id="dayChips"></div>
+      <div class="tools">
+        <select id="srcFilter" style="flex:1;min-width:0"></select>
+        <input type="text" id="search" placeholder="🔍" style="flex:1;min-width:0">
+        <button class="ghost" id="btnGroup" title="Grouper par podcast / chronologique">≡</button>
+      </div>
+      <div class="list" id="leftList"></div>
+      <div class="ft"><span class="grow" id="leftInfo"></span>
+        <button class="ghost" id="btnSelAll">Tout</button><button class="ghost" id="btnSelNone">Aucun</button></div>
+    </section>
+    <!-- RIGHT: device -->
+    <section class="pane" id="right">
+      <div class="hd"><span class="dot" id="devDot"></span><b id="devTitle">🎧 Casque</b>
+        <button class="ghost" id="btnDevRefresh" title="Actualiser">⟳</button>
+      </div>
+      <div class="crumbs" id="crumbs"></div>
+      <div class="list" id="rightList"></div>
+      <div class="ft"><span class="grow" id="rightInfo"></span>
+        <button class="ghost" id="btnDevDelete" title="Supprimer la sélection du casque">🗑</button></div>
+    </section>
+  </main>
+  <nav class="actions">
+    <button class="pri" id="btnL2R">Téléphone ➜ Casque</button>
+    <button id="btnSync">⇄ Synchroniser</button>
+    <button id="btnR2L">Casque ➜ Téléphone</button>
+    <button id="btnYT">▶ YouTube</button>
+  </nav>
+</div>
+<div id="modal"><div class="box"><div class="mh"><span id="mTitle"></span><button class="ghost" id="mClose">✕</button></div><div class="mb" id="mBody"></div><div class="mf" id="mFoot"></div></div></div>
+<input type="file" id="importFile" accept="application/json,.json" hidden>
+
+<script>
+'use strict';
+/* =====================================================================
+   SwimSync — gestion des podcasts pour le casque Creative Outlier Free Pro
+   100 % local : HTML + JS, File System Access API, localStorage, IndexedDB
+   ===================================================================== */
+
+const VERSION = '1.0.0';
+const AUDIO_EXT = ['mp3','m4a','aac','ogg','opus','flac','wav','ape','wma'];
+const DEVICE_OK_EXT = ['mp3','flac','wav','ape']; // formats lus par le casque
+const MANIFEST = '_swimsync.json';
+const DEMO = new URLSearchParams(location.search).has('demo');
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+/* ---------------- configuration (localStorage) ---------------- */
+const DEFAULT_CFG = {
+  sources: [],              // {id, name, kind:'podcastaddict'|'youtube'|'autre'}
+  targetFolder: 'PODCASTS', // dossier du casque géré par l'appli ('' = racine)
+  playOrder: 'copy-asc',    // 'copy-asc' | 'copy-desc' | 'name'
+  prefix: true,             // préfixe numérique 001 - …
+  withPodcastName: true,    // inclure le nom du podcast dans le nom de fichier
+  listenOrder: 'oldest',    // 'oldest' | 'newest' | 'podcast'
+  defaultDays: 7,           // filtre par défaut (0 = tout)
+  groupByPodcast: true,
+  protected: [],            // chemins / motifs protégés sur le casque
+  r2lDest: '',              // id de la source de destination pour casque ➜ téléphone
+  ytDest: '',               // id de la source YouTube
+  ytScriptFolder: 'Podcasts/YouTube'
+};
+let cfg = loadCfg();
+function loadCfg(){
+  try { return Object.assign({}, DEFAULT_CFG, JSON.parse(localStorage.getItem('swimsync.cfg')||'{}')); }
+  catch { return {...DEFAULT_CFG}; }
+}
+function saveCfg(){ localStorage.setItem('swimsync.cfg', JSON.stringify(cfg)); }
+
+/* ---------------- IndexedDB pour les "handles" de dossiers ---------------- */
+const idb = {
+  db: null,
+  open(){ return this.db || (this.db = new Promise((res, rej) => {
+    const r = indexedDB.open('swimsync', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('kv');
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  })); },
+  async get(k){ const db = await this.open(); return new Promise((res, rej) => { const t = db.transaction('kv').objectStore('kv').get(k); t.onsuccess = () => res(t.result); t.onerror = () => rej(t.error); }); },
+  async set(k, v){ const db = await this.open(); return new Promise((res, rej) => { const t = db.transaction('kv','readwrite'); t.objectStore('kv').put(v, k); t.oncomplete = res; t.onerror = () => rej(t.error); }); },
+  async del(k){ const db = await this.open(); return new Promise((res, rej) => { const t = db.transaction('kv','readwrite'); t.objectStore('kv').delete(k); t.oncomplete = res; t.onerror = () => rej(t.error); }); }
+};
+
+/* ---------------- état ---------------- */
+const S = {
+  handles: {},        // sourceId -> handle
+  perm: {},           // sourceId -> 'granted' | 'prompt' | 'denied'
+  files: [],          // fichiers audio du téléphone
+  sel: new Set(),     // ids sélectionnés à gauche
+  days: cfg.defaultDays,
+  srcFilter: '',
+  search: '',
+  dev: { handle:null, state:'none', path:[], entries:[], sel:new Set(), used:0, manifest:null },
+  busy: false
+};
+
+/* ---------------- utilitaires ---------------- */
+const extOf = n => (n.match(/\.([^.]+)$/)||[])[1]?.toLowerCase() || '';
+const baseOf = n => n.replace(/\.[^.]+$/, '');
+const fmtSize = b => b >= 1e9 ? (b/1e9).toFixed(2)+' Go' : b >= 1e6 ? (b/1e6).toFixed(1)+' Mo' : Math.max(1, Math.round(b/1e3))+' Ko';
+function fmtDate(t){
+  const d = new Date(t), now = new Date();
+  const day0 = new Date(now.getFullYear(), now.getMonth(), now.getDate()).getTime();
+  const hm = d.toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'});
+  if (t >= day0) return "auj. " + hm;
+  if (t >= day0 - 864e5) return 'hier ' + hm;
+  const n = Math.ceil((day0 - t) / 864e5);
+  if (n < 7) return 'il y a ' + n + ' j';
+  return d.toLocaleDateString('fr-FR', {day:'2-digit', month:'short', year: d.getFullYear() === now.getFullYear() ? undefined : '2-digit'});
+}
+function toast(msg, ms=2600){ const t = document.createElement('div'); t.className = 'toast'; t.textContent = msg; document.body.appendChild(t); setTimeout(() => t.remove(), ms); }
+const uid = () => Math.random().toString(36).slice(2, 9);
+// nom compatible FAT32
+function safeName(n, max=150){
+  let s = n.normalize('NFC').replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().replace(/[. ]+$/, '');
+  const e = extOf(s); let b = e ? s.slice(0, -(e.length+1)) : s;
+  if (b.length > max) b = b.slice(0, max).trim();
+  return (b || 'audio') + (e ? '.' + e : '');
+}
+const stripPrefix = n => n.replace(/^\d{3,4} - /, '');
+function globToRe(p){ return new RegExp('^' + p.split('*').map(x => x.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*') + '$', 'i'); }
+function isProtected(path){
+  path = path.replace(/^\/+/, '');
+  return cfg.protected.some(p => {
+    p = p.trim().replace(/^\/+|\/+$/g, ''); if (!p) return false;
+    if (p.includes('*')) return globToRe(p).test(path) || globToRe(p).test(path.split('/').pop());
+    return path.toLowerCase() === p.toLowerCase() || path.toLowerCase().startsWith(p.toLowerCase() + '/');
+  });
+}
+const joinPath = (...a) => a.filter(Boolean).join('/');
+
+/* ---------------- accès aux dossiers ---------------- */
+async function pickDirectory(purpose){
+  if (DEMO) return demoPick(purpose);
+  if (!window.showDirectoryPicker) {
+    modal('Navigateur non compatible', `<p>Ce navigateur ne permet pas d'accéder aux dossiers (API File System Access).</p>
+      <p>Utilise <b>Chrome pour Android</b> (version récente) ou Chrome/Edge sur ordinateur.</p>`, [['OK', closeModal]]);
+    throw new Error('no-fsa');
+  }
+  return window.showDirectoryPicker({ mode: 'readwrite', id: purpose, startIn: 'music' });
+}
+async function ensurePerm(h, ask=false){
+  if (!h) return 'denied';
+  if (!h.queryPermission) return 'granted'; // OPFS (démo)
+  let p = await h.queryPermission({ mode: 'readwrite' });
+  if (p !== 'granted' && ask) p = await h.requestPermission({ mode: 'readwrite' });
+  return p;
+}
+async function getDir(root, path, create=false){
+  let d = root;
+  for (const part of path.split('/').filter(Boolean)) d = await d.getDirectoryHandle(part, { create });
+  return d;
+}
+
+/* ---------------- sources (téléphone) ---------------- */
+async function loadHandles(){
+  for (const s of cfg.sources) {
+    const h = await idb.get('src:' + s.id);
+    if (h) { S.handles[s.id] = h; S.perm[s.id] = await ensurePerm(h).catch(() => 'denied'); }
+    else S.perm[s.id] = 'missing';
+  }
+  S.dev.handle = await idb.get('device') || null;
+}
+async function addSource(){
+  let h; try { h = await pickDirectory('source'); } catch (e) { if (e.message !== 'no-fsa' && e.name !== 'AbortError') toast('Erreur : ' + e.message); return; }
+  const kind = /podcast/i.test(h.name) ? 'podcastaddict' : /you ?tube|yt/i.test(h.name) ? 'youtube' : 'autre';
+  const s = { id: uid(), name: h.name, kind };
+  cfg.sources.push(s); S.handles[s.id] = h; S.perm[s.id] = 'granted';
+  await idb.set('src:' + s.id, h);
+  if (kind === 'youtube' && !cfg.ytDest) cfg.ytDest = s.id;
+  if (!cfg.r2lDest) cfg.r2lDest = s.id;
+  saveCfg(); await scanSources(); toast('Dossier « ' + h.name + ' » ajouté');
+}
+async function walk(dir, rel, depth, out, src){
+  for await (const [name, h] of dir.entries()) {
+    if (name.startsWith('.')) continue;
+    const p = joinPath(rel, name);
+    if (h.kind === 'directory') { if (depth < 4) await walk(h, p, depth + 1, out, src); }
+    else if (AUDIO_EXT.includes(extOf(name))) {
+      try {
+        const f = await h.getFile();
+        const top = rel.split('/')[0];
+        const podcast = src.kind === 'youtube' ? (top || 'YouTube') : (top || src.name);
+        out.push({ id: src.id + ':' + p, srcId: src.id, path: p, name, podcast, size: f.size, mtime: f.lastModified, handle: h });
+      } catch {}
+    }
+  }
+}
+async function scanSources(){
+  const out = [];
+  for (const s of cfg.sources) {
+    if (S.perm[s.id] !== 'granted') continue;
+    try { await walk(S.handles[s.id], '', 0, out, s); }
+    catch (e) { S.perm[s.id] = 'prompt'; console.warn(e); }
+  }
+  S.files = out;
+  for (const id of [...S.sel]) if (!out.find(f => f.id === id)) S.sel.delete(id);
+  renderBanner(); renderLeft();
+}
+const srcName = id => cfg.sources.find(s => s.id === id)?.name || '?';
+
+/* ---------------- rendu gauche ---------------- */
+const DAY_OPTS = [[1,'24 h'],[3,'3 j'],[7,'7 j'],[30,'30 j'],[0,'Tout']];
+function renderDayChips(){
+  $('#dayChips').innerHTML = DAY_OPTS.map(([d,l]) => `<button class="chip ${S.days===d?'on':''}" data-d="${d}">${l}</button>`).join('');
+}
+function visibleFiles(){
+  const lim = S.days ? Date.now() - S.days * 864e5 : 0;
+  const q = S.search.toLowerCase();
+  let v = S.files.filter(f => f.mtime >= lim && (!S.srcFilter || f.srcId === S.srcFilter) && (!q || (f.name + ' ' + f.podcast).toLowerCase().includes(q)));
+  v.sort((a, b) => b.mtime - a.mtime);
+  return v;
+}
+function fileRow(f){
+  const warn = DEVICE_OK_EXT.includes(extOf(f.name)) ? '' : `<span class="badge w" title="Format non lu par le casque">${extOf(f.name)}</span>`;
+  return `<div class="row ${S.sel.has(f.id)?'sel':''}" data-id="${esc(f.id)}"><input type="checkbox" ${S.sel.has(f.id)?'checked':''}>
+    <div class="tx"><div class="t">${esc(baseOf(f.name))}${warn}</div><div class="s">${cfg.groupByPodcast?'':esc(f.podcast)+' · '}${fmtDate(f.mtime)} · ${fmtSize(f.size)}</div></div></div>`;
+}
+function renderLeft(){
+  renderDayChips();
+  $('#srcFilter').innerHTML = `<option value="">Tous les dossiers</option>` + cfg.sources.map(s => `<option value="${s.id}" ${S.srcFilter===s.id?'selected':''}>${esc(s.name)}</option>`).join('');
+  const list = $('#leftList');
+  if (!cfg.sources.length) {
+    list.innerHTML = `<div class="empty">Aucun dossier configuré.<br>Ajoute le dossier de Podcast Addict et celui des téléchargements YouTube.<br><button class="pri" data-act="addsrc">＋ Ajouter un dossier</button></div>`;
+  } else {
+    const v = visibleFiles();
+    if (!v.length) list.innerHTML = `<div class="empty">Aucun fichier audio ${S.days ? 'sur cette période' : ''}.</div>`;
+    else if (cfg.groupByPodcast) {
+      const groups = new Map();
+      for (const f of v) { const k = f.podcast; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(f); }
+      list.innerHTML = [...groups].map(([k, fs]) => {
+        const all = fs.every(f => S.sel.has(f.id));
+        return `<div class="grp" data-grp="${esc(k)}"><input type="checkbox" ${all?'checked':''}><span>${esc(k)}</span><small>${fs.length}</small></div>` + fs.map(fileRow).join('');
+      }).join('');
+    } else list.innerHTML = v.map(fileRow).join('');
+  }
+  const selFiles = S.files.filter(f => S.sel.has(f.id));
+  $('#leftInfo').textContent = selFiles.length ? `${selFiles.length} sélectionné(s) · ${fmtSize(selFiles.reduce((a, f) => a + f.size, 0))}` : `${visibleFiles().length} fichier(s)`;
+}
+function renderBanner(){
+  const b = $('#banner');
+  const pend = cfg.sources.filter(s => S.perm[s.id] !== 'granted');
+  const parts = [];
+  if (pend.length) parts.push(`<span>🔒 Accès à réautoriser :</span>` + pend.map(s => `<button data-reauth="${s.id}">${esc(s.name)}</button>`).join(''));
+  if (S.dev.handle && S.dev.state === 'prompt') parts.push(`<span>🎧 Casque détecté ?</span><button data-act="devauth">Autoriser l'accès</button>`);
+  b.innerHTML = parts.join(' ');
+  b.classList.toggle('show', parts.length > 0);
+}
+
+/* ---------------- casque ---------------- */
+async function connectDevice(){
+  let h; try { h = await pickDirectory('device'); } catch (e) { if (e.message !== 'no-fsa' && e.name !== 'AbortError') toast('Erreur : ' + e.message); return; }
+  S.dev.handle = h; await idb.set('device', h);
+  await checkDevice(true);
+}
+async function checkDevice(force=false){
+  const d = S.dev;
+  if (!d.handle) { setDevState('none'); return; }
+  let p; try { p = await ensurePerm(d.handle); } catch { p = 'denied'; }
+  if (p !== 'granted') { setDevState('prompt'); return; }
+  try {
+    // test d'accès : si le casque est débranché, l'itération échoue
+    const it = d.handle.entries(); await it.next();
+    if (d.state !== 'on' || force) { setDevState('on'); await loadDevice(); }
+  } catch { setDevState('off'); }
+}
+function setDevState(st){
+  const d = S.dev, changed = d.state !== st; d.state = st;
+  $('#devDot').className = 'dot ' + (st === 'on' ? 'on' : st === 'prompt' ? 'wait' : '');
+  $('#devTitle').textContent = '🎧 ' + (st === 'on' ? d.handle.name : 'Casque');
+  if (changed) { if (st === 'on') toast('🎧 Casque connecté'); else if (st === 'off' && d.entries.length) toast('Casque déconnecté'); }
+  if (st !== 'on') { d.entries = []; d.manifest = null; }
+  renderBanner(); renderRight();
+}
+async function devCwd(){ return getDir(S.dev.handle, S.dev.path.join('/')); }
+async function loadDevice(){
+  const d = S.dev;
+  try {
+    const dir = await devCwd(); const out = [];
+    for await (const [name, h] of dir.entries()) {
+      if (name.startsWith('.') || name === 'System Volume Information' || name === MANIFEST) continue;
+      const e = { name, kind: h.kind, handle: h, path: joinPath(...d.path, name) };
+      if (h.kind === 'file') { try { const f = await h.getFile(); e.size = f.size; e.mtime = f.lastModified; } catch {} }
+      out.push(e);
+    }
+    d.manifest = await readManifest();
+    // ordre d'affichage : dossiers, puis ordre de lecture connu (manifeste), puis alphabétique
+    const inTarget = d.path.join('/') === cfg.targetFolder.replace(/^\/+|\/+$/g, '');
+    const orderIdx = new Map();
+    if (inTarget && d.manifest) listenSeq(d.manifest).forEach((m, i) => orderIdx.set(m.name, i));
+    out.sort((a, b) => (a.kind === b.kind ? 0 : a.kind === 'directory' ? -1 : 1)
+      || ((orderIdx.get(a.name) ?? 1e9) - (orderIdx.get(b.name) ?? 1e9))
+      || a.name.localeCompare(b.name, 'fr', { numeric: true }));
+    out.forEach(e => e.order = orderIdx.has(e.name) ? orderIdx.get(e.name) + 1 : null);
+    d.entries = out;
+    for (const n of [...d.sel]) if (!out.find(e => e.name === n)) d.sel.delete(n);
+    d.used = await dirSize(d.handle);
+  } catch (e) { console.warn(e); d.entries = []; if (d.path.length) { d.path = []; return loadDevice(); } }
+  renderRight();
+}
+async function dirSize(dir, depth=0){
+  let t = 0;
+  try { for await (const [, h] of dir.entries()) { if (h.kind === 'file') { try { t += (await h.getFile()).size; } catch {} } else if (depth < 4) t += await dirSize(h, depth + 1); } } catch {}
+  return t;
+}
+function renderRight(){
+  const d = S.dev, list = $('#rightList');
+  if (d.state !== 'on') {
+    $('#crumbs').innerHTML = '';
+    const msg = d.state === 'none' ? `Indique une première fois le dossier racine du casque.<br>Ensuite, l'appli le détecte toute seule dès qu'il est branché.`
+      : d.state === 'prompt' ? `Chrome demande de confirmer l'accès au casque.`
+      : `En attente du casque…<br><small>Éteins le casque, branche le câble magnétique (adaptateur USB-A ➜ USB-C OTG).</small>`;
+    list.innerHTML = `<div class="empty">${msg}<br>${d.state === 'prompt' ? `<button class="pri" data-act="devauth">Autoriser l'accès</button>` : ''}
+      <button ${d.state === 'none' ? 'class="pri"' : ''} data-act="devpick">${d.state === 'none' ? 'Choisir le casque' : 'Choisir un autre dossier'}</button></div>`;
+    $('#rightInfo').textContent = ''; return;
+  }
+  const crumbs = [`<a data-crumb="0">${esc(d.handle.name)}</a>`].concat(d.path.map((p, i) => `<a data-crumb="${i + 1}">${esc(p)}</a>`));
+  $('#crumbs').innerHTML = crumbs.join(' / ');
+  if (!d.entries.length) list.innerHTML = `<div class="empty">Dossier vide.</div>`;
+  else list.innerHTML = (d.path.length ? `<div class="row" data-up="1"><span>⬆️</span><div class="tx"><div class="t">..</div></div></div>` : '') + d.entries.map(e => {
+    const prot = isProtected(e.path);
+    const isDir = e.kind === 'directory';
+    const isTarget = isDir && e.path === cfg.targetFolder.replace(/^\/+|\/+$/g, '');
+    return `<div class="row ${d.sel.has(e.name)?'sel':''}" data-dev="${esc(e.name)}">
+      ${isDir ? '<span>📁</span>' : `<input type="checkbox" ${d.sel.has(e.name)?'checked':''} ${prot?'disabled':''}>`}
+      <div class="tx"><div class="t">${e.order ? `<span style="color:var(--acc2)">#${e.order}</span> ` : ''}${esc(e.name)}${isTarget ? '<span class="badge">géré</span>' : ''}</div>
+      <div class="s">${isDir ? 'dossier' : fmtSize(e.size || 0) + (e.mtime ? ' · ' + fmtDate(e.mtime) : '')}</div></div>
+      <span class="lock ${prot?'on':''}" data-lock="${esc(e.path)}" title="Protéger (ne jamais toucher)">${prot ? '🔒' : '🔓'}</span></div>`;
+  }).join('');
+  const free = 7.3e9 - d.used; // ~7,3 Go utilisables sur 8 Go
+  $('#rightInfo').textContent = `Utilisé ${fmtSize(d.used)} · libre ≈ ${fmtSize(Math.max(0, free))}` + (d.sel.size ? ` · ${d.sel.size} sél.` : '');
+}
+
+/* ---------------- manifeste du dossier géré ---------------- */
+// order = séquence de COPIE (ordre physique d'écriture). Chaque élément : {key, base, name, size}
+async function targetDir(create=false){ return getDir(S.dev.handle, cfg.targetFolder.replace(/^\/+|\/+$/g, ''), create); }
+async function readManifest(){
+  try { const d = await targetDir(); const f = await (await d.getFileHandle(MANIFEST)).getFile(); return JSON.parse(await f.text()); }
+  catch { return null; }
+}
+async function writeManifest(m){
+  const d = await targetDir(true);
+  const w = await (await d.getFileHandle(MANIFEST, { create: true })).createWritable();
+  await w.write(JSON.stringify(m, null, 1)); await w.close();
+}
+// ordre d'écoute à partir de l'ordre de copie
+const listenSeq = m => (m.playOrder || cfg.playOrder) === 'copy-desc' ? [...m.order].reverse() : [...m.order];
+function prefixNum(copyIdx){ return cfg.playOrder === 'copy-desc' ? String(999 - copyIdx).padStart(3, '0') : String(copyIdx + 1).padStart(3, '0'); }
+
+/* ---------------- planification des transferts ---------------- */
+function phoneItem(f){
+  const isYT = cfg.sources.find(s => s.id === f.srcId)?.kind === 'youtube';
+  const base = safeName(cfg.withPodcastName && !isYT && f.podcast && !f.name.toLowerCase().includes(f.podcast.toLowerCase().slice(0, 12)) ? `${f.podcast} - ${f.name}` : f.name);
+  return { key: f.id, base, title: baseOf(f.name), sub: f.podcast + ' · ' + fmtDate(f.mtime), size: f.size, mtime: f.mtime, origin: 'phone', getFile: () => f.handle.getFile() };
+}
+function sortListen(items){
+  const o = cfg.listenOrder;
+  return items.sort((a, b) => o === 'newest' ? b.mtime - a.mtime : o === 'podcast' ? (a.sub.localeCompare(b.sub) || a.mtime - b.mtime) : a.mtime - b.mtime);
+}
+// Récupère l'état actuel du dossier géré sur le casque
+async function deviceTargetState(){
+  const tpath = cfg.targetFolder.replace(/^\/+|\/+$/g, '');
+  let dir = null; try { dir = await targetDir(); } catch {}
+  const files = [];
+  if (dir) for await (const [name, h] of dir.entries()) if (h.kind === 'file' && name !== MANIFEST && !name.startsWith('.')) { let f; try { f = await h.getFile(); } catch { continue; } files.push({ name, handle: h, size: f.size, mtime: f.lastModified, path: joinPath(tpath, name) }); }
+  else if (dir === null) {/* dossier absent */}
+  // sous-dossiers du dossier géré : on n'y touche jamais
+  const subdirs = [];
+  if (dir) for await (const [name, h] of dir.entries()) if (h.kind === 'directory') subdirs.push(name);
+  const man = (await readManifest()) || { version: 1, clean: true, order: [] };
+  const present = new Map(files.map(f => [f.name, f]));
+  man.order = man.order.filter(m => present.has(m.name));
+  const managedNames = new Set(man.order.map(m => m.name));
+  const unmanaged = files.filter(f => !managedNames.has(f.name));
+  return { dir, tpath, files, present, man, unmanaged, subdirs };
+}
+function deviceItem(m, st){
+  const f = st.present.get(m.name);
+  return { key: m.key, base: m.base, title: baseOf(stripPrefix(m.name)), sub: 'sur le casque', size: f?.size || m.size || 0, mtime: f?.mtime || 0, origin: 'device', devName: m.name, getFile: () => f.handle.getFile() };
+}
+
+/* ---------- dialogue de préparation (ordre d'écoute modifiable) ---------- */
+async function openPlan(mode){
+  if (S.busy) return;
+  if (S.dev.state !== 'on') { toast('Branche et autorise le casque d\'abord'); return; }
+  const chosen = S.files.filter(f => S.sel.has(f.id));
+  if (mode === 'append' && !chosen.length) { toast('Sélectionne des fichiers à gauche'); return; }
+  const st = await deviceTargetState();
+  // les fichiers protégés ne sont jamais déplacés : ils restent hors de la file
+  const existing = listenSeq(st.man).filter(m => !isProtected(joinPath(st.tpath, m.name))).map(m => deviceItem(m, st));
+  const existingKeys = new Set(existing.map(i => i.key));
+  const newItems = sortListen(chosen.filter(f => !existingKeys.has(f.id)).map(phoneItem));
+  let queue, toDelete = [];
+  if (mode === 'append') {
+    queue = existing.concat(newItems);
+  } else { // sync : le casque = exactement la sélection
+    const selKeys = new Set(chosen.map(f => f.id));
+    const keep = existing.filter(i => selKeys.has(i.key));
+    queue = keep.concat(newItems);
+    toDelete = existing.filter(i => !selKeys.has(i.key) && !isProtected(joinPath(st.tpath, i.devName))).map(i => i.devName)
+      .concat(st.unmanaged.filter(f => !isProtected(f.path)).map(f => f.name));
+  }
+  const badFmt = newItems.filter(i => !DEVICE_OK_EXT.includes(extOf(i.base)));
+  const render = () => {
+    const tot = queue.reduce((a, i) => a + i.size, 0);
+    $('#mBody').innerHTML = `
+      <div class="note">Dossier du casque : <b>/${esc(st.tpath || '')}</b> · ordre de lecture du casque : <b>${playOrderLabel()}</b>.
+      Réordonne avec ↑ ↓ : <b>n°1 = premier écouté</b>.</div>
+      ${badFmt.length ? `<div class="note w">${badFmt.length} fichier(s) dans un format que le casque ne lit pas (seuls MP3, FLAC, WAV, APE sont lus).</div>` : ''}
+      ${mode === 'sync' ? `<div class="plan">${toDelete.length ? `<b class="d">${toDelete.length} à supprimer</b> du casque : ${toDelete.map(esc).join(', ')}` : '<b class="k">Rien à supprimer.</b>'}</div>` : ''}
+      ${st.unmanaged.length && mode === 'append' ? `<div class="note">${st.unmanaged.length} autre(s) fichier(s) déjà présents dans ce dossier ne seront pas modifiés.</div>` : ''}
+      <ul class="q">${queue.map((it, i) => `<li class="${it.origin === 'device' ? 'dev' : ''}"><span class="n">${i + 1}</span>
+        <div class="tx"><div class="t">${esc(it.title)}</div><div class="s" style="color:var(--mut);font-size:11px">${esc(it.sub)} · ${fmtSize(it.size)}</div></div>
+        <button class="ghost" data-mv="${i}" data-d="-1" ${i ? '' : 'disabled'}>↑</button><button class="ghost" data-mv="${i}" data-d="1" ${i < queue.length - 1 ? '' : 'disabled'}>↓</button>
+        <button class="ghost" data-rm="${i}" title="Retirer">✕</button></li>`).join('') || '<li>File vide.</li>'}</ul>
+      <div class="field"><label><input type="checkbox" id="optForce"> Tout réécrire dans l'ordre (plus long, ordre garanti)</label>
+      <div class="hint">L'appli réécrit automatiquement tout le dossier quand c'est nécessaire pour respecter l'ordre (réorganisation, suppression).</div></div>
+      <p style="color:var(--mut)">Total : ${queue.length} fichier(s), ${fmtSize(tot)}</p>`;
+  };
+  modal(mode === 'sync' ? '⇄ Synchroniser le casque' : 'Téléphone ➜ Casque', '', [
+    ['Annuler', closeModal],
+    [mode === 'sync' ? 'Synchroniser' : 'Copier', async () => {
+      const force = $('#optForce').checked; closeModal();
+      // en mode ajout, un fichier du casque retiré de la file est supprimé du casque
+      const removedExisting = existing.filter(e => !queue.includes(e)).map(e => e.devName);
+      await runTransfer(queue, mode === 'sync' ? toDelete : removedExisting, st, force);
+    }, 'pri']
+  ]);
+  render();
+  $('#mBody').onclick = e => {
+    const mv = e.target.dataset.mv, rm = e.target.dataset.rm;
+    if (mv !== undefined) { const i = +mv, j = i + +e.target.dataset.d; [queue[i], queue[j]] = [queue[j], queue[i]]; render(); }
+    if (rm !== undefined) { const [it] = queue.splice(+rm, 1); if (it.origin === 'device' && mode === 'sync' && !toDelete.includes(it.devName)) toDelete.push(it.devName); render(); }
+  };
+}
+const playOrderLabel = () => ({ 'copy-asc': 'ordre de copie (1er copié = 1er lu)', 'copy-desc': 'ordre de copie inversé (dernier copié = 1er lu)', 'name': 'ordre alphabétique' })[cfg.playOrder];
+
+/* ---------------- exécution d'un transfert ---------------- */
+async function runTransfer(queue, toDelete, st, force){
+  const copySeq = cfg.playOrder === 'copy-desc' ? [...queue].reverse() : [...queue];
+  const man = st.man;
+  // Peut-on simplement ajouter à la fin (sans casser l'ordre) ?
+  const prefixOk = man.order.every((m, i) => copySeq[i] && copySeq[i].key === m.key);
+  const sameMode = (man.playOrder || cfg.playOrder) === cfg.playOrder && (man.prefix ?? cfg.prefix) === cfg.prefix;
+  const incremental = !force && man.clean && sameMode && prefixOk && toDelete.length === 0;
+  const recopied = new Set(queue.filter(i => i.origin === 'device').map(i => i.devName));
+  // fichiers qui doivent rester en place : protégés, ou ni recopiés ni à supprimer
+  const keepInFolder = st.files.filter(f => isProtected(f.path) || (!recopied.has(f.name) && !toDelete.includes(f.name)));
+  const canRecreate = !!st.tpath && keepInFolder.length === 0 && st.subdirs.length === 0;
+  const ctl = new AbortController();
+  const prog = progressModal(ctl);
+  S.busy = true; let wake = null;
+  try { wake = await navigator.wakeLock?.request('screen'); } catch {}
+  const tmpFiles = [];
+  try {
+    let toCopy, start;
+    if (incremental) { toCopy = copySeq.slice(man.order.length); start = man.order.length; }
+    else {
+      // 1) mettre de côté les fichiers qui n'existent que sur le casque (copie temporaire dans le stockage privé du navigateur)
+      const devOnly = copySeq.filter(i => i.origin === 'device' && !S.files.find(f => f.id === i.key));
+      if (devOnly.length) {
+        const opfs = await navigator.storage.getDirectory();
+        const tmp = await opfs.getDirectoryHandle('swimsync-tmp', { create: true });
+        let k = 0;
+        for (const it of devOnly) {
+          prog.step(`Mise de côté ${++k}/${devOnly.length} : ${it.title}`);
+          const src = await it.getFile(); const tname = 'tmp_' + k + '_' + safeName(it.base);
+          await copyStream(src, tmp, tname, n => prog.add(0), ctl.signal);
+          const th = await tmp.getFileHandle(tname); tmpFiles.push([tmp, tname]);
+          it.getFile = () => th.getFile();
+        }
+      }
+      // les fichiers encore sur le téléphone sont relus depuis le téléphone
+      for (const it of copySeq) if (it.origin === 'device') { const f = S.files.find(x => x.id === it.key); if (f) it.getFile = () => f.handle.getFile(); }
+      // 2) vider le dossier géré
+      prog.step('Préparation du dossier sur le casque…');
+      if (canRecreate) {
+        const parent = await getDir(S.dev.handle, st.tpath.split('/').slice(0, -1).join('/'));
+        try { await parent.removeEntry(st.tpath.split('/').pop(), { recursive: true }); } catch (e) { if (e.name !== 'NotFoundError') throw e; }
+        await targetDir(true);
+        man.clean = true;
+      } else {
+        const dir = await targetDir(true);
+        for (const n of [...recopied, ...toDelete]) { if (!isProtected(joinPath(st.tpath, n))) try { await dir.removeEntry(n); } catch {} }
+        man.clean = false; // d'autres fichiers partagent le dossier : ordre « au mieux »
+      }
+      // les fichiers gérés laissés en place (protégés) restent dans le manifeste
+      const kept = new Set(keepInFolder.map(f => f.name));
+      man.order = canRecreate ? [] : man.order.filter(m => kept.has(m.name)); toCopy = copySeq; start = man.order.length;
+    }
+    // 3) copier un par un, dans l'ordre
+    man.playOrder = cfg.playOrder; man.prefix = cfg.prefix;
+    const dir = await targetDir(true);
+    const total = toCopy.reduce((a, i) => a + i.size, 0); prog.setTotal(total);
+    for (let i = 0; i < toCopy.length; i++) {
+      const it = toCopy[i];
+      const name = (cfg.prefix ? prefixNum(start + i) + ' - ' : '') + it.base;
+      prog.step(`Copie ${i + 1}/${toCopy.length} : ${it.title}`);
+      const file = await it.getFile();
+      await copyStream(file, dir, name, n => prog.add(n), ctl.signal);
+      man.order.push({ key: it.key, base: it.base, name, size: file.size });
+      man.updated = new Date().toISOString();
+      if (i % 5 === 4) await writeManifest(man); // sauvegarde régulière
+    }
+    await writeManifest(man);
+    prog.done(`✅ Terminé : ${toCopy.length} fichier(s) copié(s)${incremental ? ' (ajout)' : ' (dossier réécrit dans l\'ordre)'}${toDelete.length ? `, ${toDelete.length} supprimé(s)` : ''}.`);
+  } catch (e) {
+    console.error(e);
+    try { await writeManifest(man); } catch {}
+    prog.done(e.name === 'AbortError' ? '⛔ Transfert annulé.' : '❌ Erreur : ' + e.message, true);
+  } finally {
+    for (const [d, n] of tmpFiles) try { await d.removeEntry(n); } catch {}
+    try { wake?.release(); } catch {}
+    S.busy = false; await loadDevice();
+  }
+}
+async function copyStream(file, dir, name, onBytes, signal){
+  const fh = await dir.getFileHandle(name, { create: true });
+  const w = await fh.createWritable();
+  try {
+    const r = file.stream().getReader();
+    for (;;) {
+      if (signal?.aborted) throw new DOMException('Annulé', 'AbortError');
+      const { done, value } = await r.read(); if (done) break;
+      await w.write(value); onBytes(value.byteLength);
+    }
+    await w.close();
+  } catch (e) {
+    try { await w.abort(); } catch {}
+    try { await dir.removeEntry(name); } catch {}
+    throw e;
+  }
+}
+function progressModal(ctl){
+  let total = 0, cur = 0, t0 = Date.now();
+  modal('Transfert en cours', `<p id="pStep">Préparation…</p><div class="bar"><i id="pBar"></i></div><p id="pInfo" style="color:var(--mut)"></p>
+    <div class="note">Garde l'écran allumé et Chrome au premier plan pendant la copie.</div>`, [['Annuler', () => ctl.abort(), 'dang']], true);
+  const upd = () => {
+    const pct = total ? cur / total * 100 : 0; $('#pBar').style.width = pct.toFixed(1) + '%';
+    const sp = cur / Math.max(1, (Date.now() - t0) / 1000);
+    $('#pInfo').textContent = total ? `${fmtSize(cur)} / ${fmtSize(total)} · ${fmtSize(sp)}/s` + (sp > 0 && cur < total ? ` · reste ≈ ${Math.ceil((total - cur) / sp / 60)} min` : '') : '';
+  };
+  return {
+    setTotal(t){ total = t; cur = 0; t0 = Date.now(); upd(); },
+    add(n){ cur += n; upd(); },
+    step(s){ $('#pStep').textContent = s; },
+    done(msg, err){ $('#pStep').textContent = msg; if (!err) $('#pBar').style.width = '100%'; $('#mFoot').innerHTML = ''; addBtn('Fermer', closeModal, 'pri'); }
+  };
+}
+
+/* ---------------- casque ➜ téléphone ---------------- */
+async function openR2L(){
+  if (S.dev.state !== 'on') { toast('Casque non connecté'); return; }
+  const files = S.dev.entries.filter(e => e.kind === 'file' && S.dev.sel.has(e.name));
+  if (!files.length) { toast('Coche des fichiers à droite (casque)'); return; }
+  const dests = cfg.sources.filter(s => S.perm[s.id] === 'granted');
+  if (!dests.length) { toast('Ajoute d\'abord un dossier côté téléphone'); return; }
+  modal('Casque ➜ Téléphone', `<p>${files.length} fichier(s), ${fmtSize(files.reduce((a, f) => a + (f.size || 0), 0))}</p>
+    <div class="field"><label>Copier vers</label><select id="r2lDest">${dests.map(s => `<option value="${s.id}" ${cfg.r2lDest === s.id ? 'selected' : ''}>${esc(s.name)}</option>`).join('')}</select></div>
+    <div class="field"><label>Sous-dossier (facultatif)</label><input type="text" id="r2lSub" value="Depuis le casque" style="width:100%"></div>
+    <div class="field"><label><input type="checkbox" id="r2lStrip" checked> Retirer le préfixe « 001 - »</label></div>`,
+    [['Annuler', closeModal], ['Copier', async () => {
+      cfg.r2lDest = $('#r2lDest').value; saveCfg();
+      const sub = $('#r2lSub').value.trim(), strip = $('#r2lStrip').checked; closeModal();
+      const ctl = new AbortController(), prog = progressModal(ctl); S.busy = true;
+      try {
+        const dir = await getDir(S.handles[cfg.r2lDest], sub, true);
+        prog.setTotal(files.reduce((a, f) => a + (f.size || 0), 0));
+        let i = 0;
+        for (const e of files) {
+          prog.step(`Copie ${++i}/${files.length} : ${e.name}`);
+          await copyStream(await e.handle.getFile(), dir, strip ? stripPrefix(e.name) : e.name, n => prog.add(n), ctl.signal);
+        }
+        prog.done(`✅ ${files.length} fichier(s) copié(s) vers ${srcName(cfg.r2lDest)}${sub ? '/' + sub : ''}.`);
+      } catch (e) { prog.done(e.name === 'AbortError' ? '⛔ Annulé.' : '❌ ' + e.message, true); }
+      finally { S.busy = false; S.dev.sel.clear(); await scanSources(); renderRight(); }
+    }, 'pri']]);
+}
+async function deleteOnDevice(){
+  const files = S.dev.entries.filter(e => e.kind === 'file' && S.dev.sel.has(e.name) && !isProtected(e.path));
+  if (!files.length) { toast('Coche des fichiers (non protégés) à droite'); return; }
+  modal('Supprimer du casque', `<p>Supprimer définitivement ${files.length} fichier(s) ?</p><p style="color:var(--mut)">${files.map(f => esc(f.name)).join('<br>')}</p>`,
+    [['Annuler', closeModal], ['Supprimer', async () => {
+      closeModal(); const dir = await devCwd();
+      for (const f of files) try { await dir.removeEntry(f.name); } catch (e) { toast('Erreur : ' + e.message); }
+      // si on est dans le dossier géré : mettre à jour le manifeste
+      if (S.dev.path.join('/') === cfg.targetFolder.replace(/^\/+|\/+$/g, '')) {
+        const m = await readManifest();
+        if (m) { const del = new Set(files.map(f => f.name)); m.order = m.order.filter(x => !del.has(x.name)); m.clean = false; await writeManifest(m); }
+      }
+      S.dev.sel.clear(); await loadDevice(); toast('Supprimé');
+    }, 'dang']]);
+}
+
+/* ---------------- YouTube ---------------- */
+function termuxScript(){
+  const folder = cfg.ytScriptFolder.replace(/^\/+|\/+$/g, '');
+  return `#!/data/data/com.termux/files/usr/bin/bash
+# SwimSync – reçoit un lien partagé vers Termux et le télécharge en MP3
+URL="$1"
+DEST="$HOME/storage/shared/${folder}"
+mkdir -p "$DEST"
+echo "▶ Téléchargement : $URL"
+yt-dlp -x --audio-format mp3 --audio-quality 5 \\
+  --embed-metadata --windows-filenames --no-playlist \\
+  -o "$DEST/%(upload_date>%Y-%m-%d)s - %(title).90B.%(ext)s" "$URL" \\
+  && termux-toast "MP3 prêt dans ${folder}" 2>/dev/null
+echo "Terminé. Appuie sur Entrée pour fermer."; read -r`;
+}
+function termuxInstall(){
+  return `pkg update -y && pkg install -y python ffmpeg termux-api
+pip install -U yt-dlp
+termux-setup-storage
+mkdir -p ~/bin
+cat > ~/bin/termux-url-opener <<'EOF'
+${termuxScript()}
+EOF
+chmod +x ~/bin/termux-url-opener
+echo "OK – partage un lien YouTube vers Termux pour tester"`;
+}
+function openYT(){
+  const ytSrc = cfg.sources.find(s => s.id === cfg.ytDest);
+  modal('▶ YouTube ➜ MP3', `
+    <div class="note">Un navigateur ne peut pas télécharger une vidéo YouTube tout seul : il faut une appli de téléchargement sur le téléphone.
+    Recommandé : <b>Seal</b> (gratuite, open source). Colle un lien ici ou partage-le depuis YouTube ➜ choisis <b>Seal</b> ➜ le MP3 arrive dans
+    <b>/${esc(cfg.ytScriptFolder)}</b>${ytSrc ? ` (dossier « ${esc(ytSrc.name)} » de l'appli)` : ''}.</div>
+    <div class="field"><label>Lien YouTube</label><input type="url" id="ytUrl" placeholder="https://youtu.be/…" style="width:100%"></div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="pri" id="ytShare">Partager vers Seal…</button><button id="ytPaste">📋 Coller</button><button id="ytCopy">Copier le lien</button></div>
+    <p style="color:var(--mut);font-size:12px">Une fois le téléchargement terminé, appuie sur ⟳ dans le panneau Téléphone.</p>
+    <details open><summary>Installer et régler Seal (une seule fois)</summary>
+      <ol>
+        <li>Installe <b>Seal</b> depuis F-Droid ou la page GitHub du projet (fichier .apk).</li>
+        <li>Seal ➜ Réglages ➜ <b>Format</b> : coche « Extraire l'audio », format <b>MP3</b>.</li>
+        <li>Seal ➜ Réglages ➜ <b>Répertoire de téléchargement</b> (audio) : choisis <b>/${esc(cfg.ytScriptFolder)}</b> (crée le dossier si besoin).</li>
+        <li>Facultatif : modèle de nom de fichier <code>%(upload_date>%Y-%m-%d)s - %(title).90B.%(ext)s</code> pour avoir la date devant.</li>
+        <li>Dans SwimSync, ajoute ce même dossier avec le bouton ＋ à gauche.</li>
+      </ol>
+    </details>
+    <details><summary>Alternative avancée : Termux + yt-dlp</summary>
+      <ol>
+        <li>Installe <b>Termux</b> depuis F-Droid ou GitHub (la version du Play Store est ancienne) et, si possible, <b>Termux:API</b>.</li>
+        <li>Ouvre Termux, colle la commande ci-dessous, accepte l'accès au stockage.</li>
+        <li>Dans SwimSync, ajoute le dossier <b>/${esc(cfg.ytScriptFolder)}</b> (bouton ＋ à gauche).</li>
+      </ol>
+      <div class="field"><label>Dossier de destination (dans le stockage interne)</label><input type="text" id="ytFolder" value="${esc(cfg.ytScriptFolder)}" style="width:100%"></div>
+      <pre class="code" id="ytCmd">${esc(termuxInstall())}</pre>
+      <button id="ytCopyCmd">Copier la commande</button>
+      <p style="color:var(--mut);font-size:11px">Mise à jour de yt-dlp de temps en temps : <code>pip install -U yt-dlp</code>. Télécharge uniquement des contenus que tu as le droit de copier.</p>
+    </details>`, [['Fermer', closeModal]]);
+  $('#ytFolder').oninput = e => { cfg.ytScriptFolder = e.target.value.trim() || 'Podcasts/YouTube'; saveCfg(); $('#ytCmd').textContent = termuxInstall(); };
+  $('#ytCopyCmd').onclick = () => navigator.clipboard.writeText(termuxInstall()).then(() => toast('Commande copiée'));
+  $('#ytCopy').onclick = () => navigator.clipboard.writeText($('#ytUrl').value).then(() => toast('Lien copié'));
+  $('#ytPaste').onclick = async () => { try { $('#ytUrl').value = await navigator.clipboard.readText(); } catch { toast('Colle le lien à la main'); } };
+  $('#ytShare').onclick = async () => {
+    const url = $('#ytUrl').value.trim();
+    if (!/^https?:\/\/(www\.|m\.|music\.)?(youtube\.com|youtu\.be)\//i.test(url)) { toast('Lien YouTube invalide'); return; }
+    if (navigator.share) { try { await navigator.share({ url }); } catch {} }
+    else { await navigator.clipboard.writeText(url); toast('Partage indisponible : lien copié'); }
+  };
+}
+
+/* ---------------- test de l'ordre de lecture du casque ---------------- */
+function makeBeepWav(n){
+  const sr = 22050, beep = 0.22, gap = 0.22, dur = 0.6 + n * (beep + gap) + 1.2;
+  const len = Math.floor(sr * dur), buf = new ArrayBuffer(44 + len * 2), v = new DataView(buf);
+  const ws = (o, s) => [...s].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  ws(0, 'RIFF'); v.setUint32(4, 36 + len * 2, true); ws(8, 'WAVE'); ws(12, 'fmt '); v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true); v.setUint16(22, 1, true); v.setUint32(24, sr, true); v.setUint32(28, sr * 2, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true);
+  ws(36, 'data'); v.setUint32(40, len * 2, true);
+  for (let i = 0; i < len; i++) {
+    const t = i / sr - 0.6; let s = 0;
+    if (t >= 0) { const k = Math.floor(t / (beep + gap)), r = t - k * (beep + gap); if (k < n && r < beep) s = Math.sin(2 * Math.PI * 880 * t) * 0.6 * Math.min(1, r / 0.01, (beep - r) / 0.01); }
+    v.setInt16(44 + i * 2, s * 32767, true);
+  }
+  return new File([buf], 'beep.wav', { type: 'audio/wav' });
+}
+// copiés dans l'ordre 1,2,3 mais nommés pour que l'ordre alphabétique soit 3,1,2
+const TEST_FILES = [['b_test_1bip.wav', 1], ['c_test_2bips.wav', 2], ['a_test_3bips.wav', 3]];
+async function orderTest(){
+  if (S.dev.state !== 'on') { toast('Connecte le casque d\'abord'); return; }
+  modal('Tester l\'ordre de lecture du casque', `
+    <p>L'appli va copier 3 petits fichiers à la <b>racine</b> du casque, <b>un par un</b> dans cet ordre : 1 bip, puis 2 bips, puis 3 bips.
+    Leurs noms sont choisis pour que l'ordre alphabétique soit différent (3 bips, 1 bip, 2 bips).</p>
+    <ol><li>Lance la copie.</li><li>Débranche le casque, passe en mode lecteur MP3 et écoute dans quel ordre arrivent les bips (utilise « suivant » si tu as de la musique avant).</li>
+    <li>Reviens ici et indique l'ordre entendu.</li></ol>
+    <div style="display:flex;gap:6px;flex-wrap:wrap"><button class="pri" id="tCopy">1. Copier les fichiers de test</button><button id="tDel">Supprimer les fichiers de test</button></div>
+    <p><b>Ordre entendu :</b></p>
+    <div style="display:flex;gap:6px;flex-wrap:wrap">
+      <button data-res="copy-asc">1 – 2 – 3</button><button data-res="copy-desc">3 – 2 – 1</button><button data-res="name">3 – 1 – 2</button><button data-res="other">Autre</button></div>
+    <p id="tMsg" style="color:var(--mut)"></p>`, [['Fermer', closeModal]]);
+  $('#tCopy').onclick = async () => {
+    try { for (const [n, k] of TEST_FILES) { try { await S.dev.handle.removeEntry(n); } catch {} }
+      for (const [n, k] of TEST_FILES) await copyStream(makeBeepWav(k), S.dev.handle, n, () => {});
+      $('#tMsg').textContent = '✅ Fichiers copiés. Écoute-les sur le casque puis reviens.'; loadDevice(); }
+    catch (e) { $('#tMsg').textContent = '❌ ' + e.message; }
+  };
+  $('#tDel').onclick = async () => { for (const [n] of TEST_FILES) try { await S.dev.handle.removeEntry(n); } catch {} $('#tMsg').textContent = 'Fichiers de test supprimés.'; loadDevice(); };
+  $('#mBody').addEventListener('click', e => {
+    const r = e.target.dataset.res; if (!r) return;
+    if (r === 'other') { $('#tMsg').innerHTML = 'Ordre inattendu : garde le mode actuel et le préfixe numérique activé, puis signale-le.'; return; }
+    cfg.playOrder = r; saveCfg();
+    $('#tMsg').innerHTML = `✅ Réglage enregistré : <b>${playOrderLabel()}</b>. Lors du prochain transfert, l'appli réécrira le dossier dans le bon ordre.`;
+  });
+}
+
+/* ---------------- réglages ---------------- */
+function openSettings(){
+  const srcRows = cfg.sources.map(s => `<li><div class="tx"><input type="text" data-sname="${s.id}" value="${esc(s.name)}" style="width:100%"></div>
+    <select data-skind="${s.id}"><option value="podcastaddict" ${s.kind==='podcastaddict'?'selected':''}>Podcast Addict</option><option value="youtube" ${s.kind==='youtube'?'selected':''}>YouTube</option><option value="autre" ${s.kind==='autre'?'selected':''}>Autre</option></select>
+    <span title="${S.perm[s.id]}">${S.perm[s.id] === 'granted' ? '✅' : '🔒'}</span>
+    <button class="ghost" data-srepick="${s.id}" title="Changer de dossier">📂</button><button class="ghost" data-sdel="${s.id}" title="Retirer">✕</button></li>`).join('');
+  modal('⚙️ Réglages', `
+    <h4>Dossiers du téléphone</h4>
+    <ul class="q">${srcRows || '<li>Aucun</li>'}</ul>
+    <button id="sAdd">＋ Ajouter un dossier</button>
+    <h4>Casque</h4>
+    <div class="field"><label>Dossier du casque géré par l'appli</label><input type="text" id="sTarget" value="${esc(cfg.targetFolder)}" style="width:100%">
+      <div class="hint">Conseil : un dossier réservé (ex. PODCASTS). L'appli peut alors le recréer pour garantir l'ordre. Laisser vide = racine (ordre « au mieux »).</div></div>
+    <div class="field"><label>Ordre de lecture du casque</label><select id="sOrder">
+      <option value="copy-asc" ${cfg.playOrder==='copy-asc'?'selected':''}>Ordre de copie (1er copié = 1er lu)</option>
+      <option value="copy-desc" ${cfg.playOrder==='copy-desc'?'selected':''}>Ordre de copie inversé (dernier copié = 1er lu)</option>
+      <option value="name" ${cfg.playOrder==='name'?'selected':''}>Ordre alphabétique des noms</option></select>
+      <button id="sTest" style="margin-top:5px">🔊 Tester mon casque</button></div>
+    <div class="field"><label><input type="checkbox" id="sPrefix" ${cfg.prefix?'checked':''}> Préfixer les fichiers par un numéro (001 - …)</label>
+      <label><input type="checkbox" id="sPodName" ${cfg.withPodcastName?'checked':''}> Ajouter le nom du podcast au nom du fichier</label></div>
+    <div class="field"><label>Fichiers protégés sur le casque (un par ligne, chemin depuis la racine, * autorisé)</label>
+      <textarea id="sProt" rows="4" style="width:100%" placeholder="Musique&#10;*.flac&#10;PODCASTS/favori.mp3">${esc(cfg.protected.join('\n'))}</textarea>
+      <div class="hint">Astuce : touche 🔓 à côté d'un fichier ou dossier du casque pour le protéger.</div></div>
+    <h4>Affichage et ordre d'écoute</h4>
+    <div class="field"><label>Ordre d'écoute proposé pour les nouveaux fichiers</label><select id="sListen">
+      <option value="oldest" ${cfg.listenOrder==='oldest'?'selected':''}>Du plus ancien au plus récent</option>
+      <option value="newest" ${cfg.listenOrder==='newest'?'selected':''}>Du plus récent au plus ancien</option>
+      <option value="podcast" ${cfg.listenOrder==='podcast'?'selected':''}>Groupé par podcast</option></select></div>
+    <div class="field"><label>Période affichée par défaut</label><select id="sDays">${DAY_OPTS.map(([d, l]) => `<option value="${d}" ${cfg.defaultDays===d?'selected':''}>${l}</option>`).join('')}</select></div>
+    <h4>Sauvegarde des réglages</h4>
+    <div style="display:flex;gap:6px;flex-wrap:wrap"><button id="sExport">⬇ Exporter</button><button id="sImport">⬆ Importer</button><button class="dang" id="sReset">Réinitialiser</button></div>
+    <div class="hint" style="color:var(--mut);font-size:11px;margin-top:4px">Les autorisations d'accès aux dossiers ne peuvent pas être exportées : après un import, il faudra re-choisir chaque dossier (📂).</div>
+    <p style="color:var(--mut);font-size:11px">SwimSync v${VERSION}${DEMO ? ' · MODE DÉMO' : ''}</p>`,
+    [['Fermer', () => { saveSettingsForm(); closeModal(); }, 'pri']]);
+  const mb = $('#mBody');
+  mb.querySelectorAll('[data-sname]').forEach(i => i.onchange = () => { cfg.sources.find(s => s.id === i.dataset.sname).name = i.value; saveCfg(); });
+  mb.querySelectorAll('[data-skind]').forEach(i => i.onchange = () => { const s = cfg.sources.find(s => s.id === i.dataset.skind); s.kind = i.value; if (i.value === 'youtube') cfg.ytDest = s.id; saveCfg(); });
+  mb.querySelectorAll('[data-sdel]').forEach(b => b.onclick = async () => { const id = b.dataset.sdel; cfg.sources = cfg.sources.filter(s => s.id !== id); delete S.handles[id]; await idb.del('src:' + id); saveCfg(); saveSettingsForm(); openSettings(); scanSources(); });
+  mb.querySelectorAll('[data-srepick]').forEach(b => b.onclick = async () => {
+    const id = b.dataset.srepick; let h; try { h = await pickDirectory('source'); } catch { return; }
+    S.handles[id] = h; S.perm[id] = 'granted'; await idb.set('src:' + id, h); saveSettingsForm(); openSettings(); scanSources(); });
+  $('#sAdd').onclick = async () => { saveSettingsForm(); await addSource(); openSettings(); };
+  $('#sTest').onclick = () => { saveSettingsForm(); orderTest(); };
+  $('#sExport').onclick = () => { saveSettingsForm(); exportCfg(); };
+  $('#sImport').onclick = () => $('#importFile').click();
+  $('#sReset').onclick = async () => { if (!confirm('Effacer tous les réglages ?')) return; localStorage.removeItem('swimsync.cfg'); for (const s of cfg.sources) await idb.del('src:' + s.id); await idb.del('device'); location.reload(); };
+}
+function saveSettingsForm(){
+  if (!$('#sTarget')) return;
+  cfg.targetFolder = $('#sTarget').value.trim().replace(/^\/+|\/+$/g, '');
+  cfg.playOrder = $('#sOrder').value; cfg.prefix = $('#sPrefix').checked; cfg.withPodcastName = $('#sPodName').checked;
+  cfg.protected = $('#sProt').value.split('\n').map(s => s.trim()).filter(Boolean);
+  cfg.listenOrder = $('#sListen').value; cfg.defaultDays = +$('#sDays').value;
+  saveCfg(); renderRight();
+}
+function exportCfg(){
+  const data = { app: 'SwimSync', version: VERSION, exported: new Date().toISOString(), cfg };
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }));
+  a.download = 'swimsync-reglages-' + new Date().toISOString().slice(0, 10) + '.json'; a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+}
+$('#importFile').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  try {
+    const d = JSON.parse(await f.text()); if (d.app !== 'SwimSync' || !d.cfg) throw new Error('fichier non reconnu');
+    cfg = Object.assign({}, DEFAULT_CFG, d.cfg); saveCfg();
+    for (const s of cfg.sources) { const h = await idb.get('src:' + s.id); if (h) { S.handles[s.id] = h; S.perm[s.id] = await ensurePerm(h).catch(() => 'denied'); } else S.perm[s.id] = 'missing'; }
+    closeModal(); toast('Réglages importés'); renderBanner(); await scanSources(); openSettings();
+  } catch (err) { toast('Import impossible : ' + err.message); }
+  e.target.value = '';
+};
+
+/* ---------------- aide ---------------- */
+function openHelp(){
+  modal('❔ Mode d\'emploi', `
+    <ol>
+      <li><b>＋ à gauche</b> : ajoute le dossier de Podcast Addict, puis celui des MP3 YouTube. Les sous-dossiers (un par abonnement) sont regroupés automatiquement.</li>
+      <li><b>À droite</b> : la première fois, touche « Choisir le casque » et sélectionne la racine du casque (casque éteint, câble magnétique + adaptateur OTG). Ensuite, l'appli le détecte toute seule quand il est branché.</li>
+      <li>Filtre les épisodes (24 h, 3 j, 7 j…), coche ceux à écouter, puis :
+        <ul><li><b>Téléphone ➜ Casque</b> : ajoute à la suite de ce qui est déjà sur le casque ;</li>
+        <li><b>Synchroniser</b> : le dossier du casque contiendra exactement la sélection (les fichiers protégés 🔒 ne sont jamais touchés) ;</li>
+        <li><b>Casque ➜ Téléphone</b> : coche des fichiers à droite pour les rapatrier.</li></ul></li>
+      <li>Avant chaque copie, tu peux réordonner la liste : n°1 = premier écouté.</li>
+    </ol>
+    <h4>Pourquoi l'ordre est délicat</h4>
+    <p>Beaucoup de lecteurs MP3 lisent les fichiers dans l'ordre où ils sont écrits sur la mémoire, pas dans l'ordre alphabétique. Quand on supprime un fichier, la place libérée est réutilisée par le suivant copié, ce qui mélange l'ordre.
+    SwimSync copie donc les fichiers <b>un par un</b>, ajoute un <b>numéro</b> devant chaque nom, et <b>recrée le dossier</b> quand une suppression ou une réorganisation l'exige.
+    Utilise « 🔊 Tester mon casque » dans les réglages pour vérifier l'ordre de lecture du tien.</p>
+    <h4>Podcast Addict</h4>
+    <p>Si Chrome refuse de sélectionner le dossier de Podcast Addict (« Android/data/… » est bloqué depuis Android 11), va dans <b>Podcast Addict ➜ Réglages ➜ Téléchargement ➜ Dossier de stockage</b> et choisis un dossier normal (ex. <code>/Podcasts</code>).</p>`, [['OK', closeModal, 'pri']]);
+}
+
+/* ---------------- modale générique ---------------- */
+function modal(title, html, buttons=[], locked=false){
+  $('#mTitle').textContent = title; $('#mBody').innerHTML = html; $('#mBody').onclick = null; $('#mFoot').innerHTML = '';
+  $('#mClose').style.display = locked ? 'none' : '';
+  buttons.forEach(([l, fn, cls]) => addBtn(l, fn, cls));
+  $('#modal').classList.add('show');
+}
+function addBtn(l, fn, cls){ const b = document.createElement('button'); b.textContent = l; if (cls) b.className = cls; b.onclick = fn; $('#mFoot').appendChild(b); }
+function closeModal(){ $('#modal').classList.remove('show'); $('#mBody').innerHTML = ''; }
+$('#mClose').onclick = () => { if ($('#sTarget')) saveSettingsForm(); closeModal(); };
+
+/* ---------------- évènements ---------------- */
+document.addEventListener('click', async e => {
+  const t = e.target;
+  const act = t.closest('[data-act]')?.dataset.act;
+  if (act === 'addsrc') return addSource();
+  if (act === 'devpick') return connectDevice();
+  if (act === 'devauth') { const p = await ensurePerm(S.dev.handle, true).catch(() => 'denied'); if (p === 'granted') checkDevice(true); else toast('Accès refusé'); return; }
+  const re = t.dataset.reauth;
+  if (re) { const p = await ensurePerm(S.handles[re], true).catch(() => 'denied'); S.perm[re] = p; if (p === 'granted') scanSources(); else renderBanner(); }
+});
+$('#dayChips').onclick = e => { const d = e.target.dataset.d; if (d === undefined) return; S.days = +d; renderLeft(); };
+$('#srcFilter').onchange = e => { S.srcFilter = e.target.value; renderLeft(); };
+$('#search').oninput = e => { S.search = e.target.value; renderLeft(); };
+$('#btnGroup').onclick = () => { cfg.groupByPodcast = !cfg.groupByPodcast; saveCfg(); renderLeft(); };
+$('#btnRescan').onclick = () => scanSources().then(() => toast('Liste actualisée'));
+$('#btnAddSource').onclick = addSource;
+$('#btnSelAll').onclick = () => { visibleFiles().forEach(f => S.sel.add(f.id)); renderLeft(); };
+$('#btnSelNone').onclick = () => { S.sel.clear(); renderLeft(); };
+$('#leftList').onclick = e => {
+  const g = e.target.closest('.grp');
+  if (g) { const fs = visibleFiles().filter(f => f.podcast === g.dataset.grp); const all = fs.every(f => S.sel.has(f.id)); fs.forEach(f => all ? S.sel.delete(f.id) : S.sel.add(f.id)); renderLeft(); return; }
+  const r = e.target.closest('.row'); if (!r) return;
+  const id = r.dataset.id; S.sel.has(id) ? S.sel.delete(id) : S.sel.add(id); renderLeft();
+};
+$('#rightList').onclick = async e => {
+  const lock = e.target.dataset.lock;
+  if (lock !== undefined) {
+    if (isProtected(lock)) { cfg.protected = cfg.protected.filter(p => p.replace(/^\/+|\/+$/g, '').toLowerCase() !== lock.toLowerCase()); if (isProtected(lock)) toast('Protégé par un motif : modifie-le dans les réglages'); }
+    else { cfg.protected.push(lock); S.dev.sel.delete(lock.split('/').pop()); }
+    saveCfg(); renderRight(); return;
+  }
+  const r = e.target.closest('.row'); if (!r) return;
+  if (r.dataset.up) { S.dev.path.pop(); S.dev.sel.clear(); return loadDevice(); }
+  const ent = S.dev.entries.find(x => x.name === r.dataset.dev); if (!ent) return;
+  if (ent.kind === 'directory') { S.dev.path.push(ent.name); S.dev.sel.clear(); return loadDevice(); }
+  if (isProtected(ent.path)) { toast('Fichier protégé'); return; }
+  S.dev.sel.has(ent.name) ? S.dev.sel.delete(ent.name) : S.dev.sel.add(ent.name); renderRight();
+};
+$('#crumbs').onclick = e => { const c = e.target.dataset.crumb; if (c === undefined) return; S.dev.path = S.dev.path.slice(0, +c); S.dev.sel.clear(); loadDevice(); };
+$('#btnDevRefresh').onclick = () => S.dev.state === 'on' ? loadDevice() : checkDevice(true);
+$('#btnDevDelete').onclick = deleteOnDevice;
+$('#btnL2R').onclick = () => openPlan('append');
+$('#btnSync').onclick = () => openPlan('sync');
+$('#btnR2L').onclick = openR2L;
+$('#btnYT').onclick = openYT;
+$('#btnSettings').onclick = openSettings;
+$('#btnHelp').onclick = openHelp;
+document.addEventListener('visibilitychange', () => { if (!document.hidden) { checkDevice(); if (!S.busy) scanSources(); } });
+
+/* ---------------- mode démo (test sans téléphone, stockage privé du navigateur) ---------------- */
+async function demoRoot(){ return (await navigator.storage.getDirectory()).getDirectoryHandle('demo', { create: true }); }
+async function demoSetup(){
+  const root = await demoRoot();
+  if (localStorage.getItem('swimsync.demo')) return;
+  const mk = async (path, size) => { const parts = path.split('/'); const n = parts.pop(); const d = await getDir(root, parts.join('/'), true);
+    const w = await (await d.getFileHandle(n, { create: true })).createWritable(); await w.write(new Uint8Array(size).fill(65)); await w.close(); };
+  await mk('telephone/podcast/Les Couilles sur la table/Episode 101 - Le corps.mp3', 300000);
+  await mk('telephone/podcast/Les Couilles sur la table/Episode 102 - La force.mp3', 250000);
+  await mk('telephone/podcast/La Méthode scientifique/Les abysses.mp3', 200000);
+  await mk('telephone/podcast/La Méthode scientifique/Le sommeil.m4a', 180000);
+  await mk('telephone/podcast/Affaires sensibles/Le Concorde.mp3', 320000);
+  await mk('telephone/YouTube/2026-11-20 - Conférence natation.mp3', 400000);
+  await mk('telephone/YouTube/2026-11-22 - Technique crawl.mp3', 150000);
+  await mk('casque/Musique/chanson.mp3', 100000);
+  await mk('casque/vieux_podcast.mp3', 120000);
+  localStorage.setItem('swimsync.demo', '1');
+}
+async function demoPick(purpose){
+  const root = await demoRoot();
+  const choices = { 'Podcast Addict (démo)': 'telephone/podcast', 'YouTube (démo)': 'telephone/YouTube', 'Casque (démo)': 'casque' };
+  const def = purpose === 'device' ? 'Casque (démo)' : (cfg.sources.length ? 'YouTube (démo)' : 'Podcast Addict (démo)');
+  const k = window.__demoChoice || def; window.__demoChoice = null;
+  const h = await getDir(root, choices[k]);
+  return h;
+}
+
+/* ---------------- démarrage ---------------- */
+(async function init(){
+  if (DEMO) { await demoSetup(); document.title += ' (démo)'; }
+  await loadHandles();
+  renderLeft(); renderRight(); renderBanner();
+  await scanSources();
+  await checkDevice(true);
+  setInterval(() => { if (!S.busy && !document.hidden) checkDevice(); }, 3000);
+  if ('serviceWorker' in navigator && location.protocol === 'https:') navigator.serviceWorker.register('sw.js').catch(() => {});
+})();
+</script>
+</body>
+</html>
