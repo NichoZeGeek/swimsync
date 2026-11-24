@@ -40,7 +40,7 @@ main{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:6px;min-h
 .row.sel{background:var(--sel)}
 .row .tx{flex:1;min-width:0}
 .row .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#leftList .row .t{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word}
+#leftList .row .t,#rightList .row .t{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word}
 .row .s{color:var(--mut);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .row input[type=checkbox]{width:18px;height:18px;flex:none;accent-color:var(--acc)}
 .grp{padding:5px 8px;background:#092537;color:var(--acc2);font-size:12px;font-weight:600;position:sticky;top:0;display:flex;gap:6px;align-items:center;z-index:1}
@@ -147,7 +147,7 @@ details summary{cursor:pointer;color:var(--acc2);margin:6px 0}
    100 % local : HTML + JS, File System Access API, localStorage, IndexedDB
    ===================================================================== */
 
-const VERSION = '1.1.0';
+const VERSION = '1.2.0';
 const AUDIO_EXT = ['mp3','m4a','aac','ogg','opus','flac','wav','ape','wma'];
 const DEVICE_OK_EXT = ['mp3','flac','wav','ape']; // formats lus par le casque
 const MANIFEST = '_swimsync.json';
@@ -353,7 +353,7 @@ async function parseAllMeta(){
   await Promise.all([worker(), worker(), worker()]);
   if (run !== metaRun) return;
   // ménage : retirer du cache les fichiers disparus
-  const ids = new Set(S.files.map(f => f.id)); for (const k of Object.keys(metaCache)) if (!ids.has(k)) delete metaCache[k];
+  const ids = new Set(S.files.map(f => f.id)); for (const k of Object.keys(metaCache)) if (!k.startsWith('dev:') && !ids.has(k)) delete metaCache[k];
   saveMetaCache(); renderLeft();
 }
 function applyMeta(f, m){
@@ -365,20 +365,54 @@ function applyMeta(f, m){
 const fTitle = f => cfg.useMeta && f.meta?.title ? f.meta.title : baseOf(f.name);
 const fShow = f => cfg.useMeta && f.meta?.album ? f.meta.album : f.podcast;
 const fmtPub = t => new Date(t).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: new Date(t).getFullYear() === new Date().getFullYear() ? undefined : '2-digit' });
-async function openInfo(id){
-  const f = S.files.find(x => x.id === id); if (!f) return;
-  let m = {}; try { m = await readMeta(await f.handle.getFile(), true); } catch {}
-  const row = (k, v) => v ? `<tr><td style="color:var(--mut);padding:2px 8px 2px 0;vertical-align:top">${k}</td><td>${esc(v)}</td></tr>` : '';
-  modal(m.title || baseOf(f.name), `
+async function showInfo({ file, name, size, mtime, where, whenLabel, actions }){
+  let m = {}; try { m = await readMeta(file, true); } catch {}
+  const pub = /^\d{4}-\d{2}-\d{2}/.test(m.date || '') ? fmtPub(new Date(m.date.slice(0, 10) + 'T12:00:00').getTime()) : m.date;
+  const row = (k, v) => v ? `<tr><td style="color:var(--mut);padding:2px 8px 2px 0;vertical-align:top">${k}</td><td style="word-break:break-word">${esc(v)}</td></tr>` : '';
+  modal(m.title || baseOf(name), `
     <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap">
       ${m.cover ? `<img src="${m.cover}" style="width:110px;height:110px;object-fit:cover;border-radius:8px">` : ''}
       <table style="flex:1;min-width:200px;font-size:12px">
-        ${row('Podcast', m.album)}${row('Auteur', m.artist)}${row('Publié', m.date ? (f.pub ? fmtPub(f.pub) : m.date) : '')}
-        ${row('Durée', fmtDur(m.duration))}${row('Débit', m.bitrate ? Math.round(m.bitrate / 1000) + ' kb/s' : '')}${row('Taille', fmtSize(f.size))}
-        ${row('Téléchargé', new Date(f.mtime).toLocaleString('fr-FR'))}${row('Dossier', srcName(f.srcId) + '/' + f.path)}${row('Genre', m.genre)}
+        ${row('Podcast', m.album)}${row('Auteur', m.artist)}${row('Publié', pub)}
+        ${row('Durée', fmtDur(m.duration))}${row('Débit', m.bitrate ? Math.round(m.bitrate / 1000) + ' kb/s' : '')}${row('Taille', fmtSize(size))}
+        ${row(whenLabel, new Date(mtime).toLocaleString('fr-FR'))}${row('Fichier', where)}${row('Genre', m.genre)}
       </table></div>
-    ${m.comment ? `<div style="margin-top:10px;white-space:pre-wrap;color:#cfe8f5;font-size:12px">${esc(m.comment.replace(/<[^>]+>/g, ' ').replace(/[ \t]+/g, ' '))}</div>` : '<p style="color:var(--mut)">Pas de description dans le fichier.</p>'}`,
-    [[S.sel.has(id) ? 'Désélectionner' : 'Sélectionner', () => { S.sel.has(id) ? S.sel.delete(id) : S.sel.add(id); renderLeft(); closeModal(); }], ['Fermer', closeModal, 'pri']]);
+    ${m.comment ? `<div style="margin-top:10px;white-space:pre-wrap;color:#cfe8f5;font-size:12px">${esc(m.comment.replace(/<[^>]+>/g, ' ').replace(/[ \t]+/g, ' '))}</div>` : `<p style="color:var(--mut)">${m.title || m.album ? 'Pas de description dans le fichier.' : 'Aucune métadonnée dans ce fichier.'}</p>`}`,
+    actions.concat([['Fermer', closeModal, 'pri']]));
+}
+async function openInfo(id){
+  const f = S.files.find(x => x.id === id); if (!f) return;
+  showInfo({ file: await f.handle.getFile(), name: f.name, size: f.size, mtime: f.mtime, where: srcName(f.srcId) + '/' + f.path, whenLabel: 'Téléchargé',
+    actions: [[S.sel.has(id) ? 'Désélectionner' : 'Sélectionner', () => { S.sel.has(id) ? S.sel.delete(id) : S.sel.add(id); renderLeft(); closeModal(); }]] });
+}
+async function openDevInfo(name){
+  const e = S.dev.entries.find(x => x.name === name); if (!e) return;
+  let file; try { file = await e.handle.getFile(); } catch { toast('Fichier illisible (casque débranché ?)'); return; }
+  const prot = isProtected(e.path);
+  showInfo({ file, name: e.name, size: e.size || file.size, mtime: e.mtime || file.lastModified, where: '🎧 /' + e.path, whenLabel: 'Copié sur le casque',
+    actions: prot ? [] : [[S.dev.sel.has(name) ? 'Désélectionner' : 'Sélectionner', () => { S.dev.sel.has(name) ? S.dev.sel.delete(name) : S.dev.sel.add(name); renderRight(); closeModal(); }]] });
+}
+// métadonnées des fichiers du casque (dossier affiché), avec le même cache
+let devMetaRun = 0;
+const devKey = e => 'dev:' + S.dev.handle.name + ':' + e.path;
+async function parseDeviceMeta(){
+  const run = ++devMetaRun; await loadMetaCache();
+  const todo = [];
+  for (const e of S.dev.entries) {
+    if (e.kind !== 'file' || !AUDIO_EXT.includes(extOf(e.name))) continue;
+    const c = metaCache[devKey(e)];
+    if (c && c.size === e.size && c.mtime === e.mtime) e.meta = c.m; else todo.push(e);
+  }
+  renderRight();
+  let last = Date.now(), changed = false;
+  while (todo.length && run === devMetaRun && S.dev.state === 'on') {
+    const e = todo.shift();
+    try { const m = await readMeta(await e.handle.getFile()); e.meta = m; metaCache[devKey(e)] = { size: e.size, mtime: e.mtime, m }; changed = true; }
+    catch { e.meta = {}; }
+    if (Date.now() - last > 400) { last = Date.now(); renderRight(); }
+  }
+  if (changed) saveMetaCache();
+  if (run === devMetaRun) renderRight();
 }
 
 /* ---------------- accès aux dossiers ---------------- */
@@ -551,6 +585,8 @@ async function loadDevice(){
     out.forEach(e => e.order = orderIdx.has(e.name) ? orderIdx.get(e.name) + 1 : null);
     d.entries = out;
     for (const n of [...d.sel]) if (!out.find(e => e.name === n)) d.sel.delete(n);
+    renderRight();
+    parseDeviceMeta();
     d.used = await dirSize(d.handle);
   } catch (e) { console.warn(e); d.entries = []; if (d.path.length) { d.path = []; return loadDevice(); } }
   renderRight();
@@ -559,6 +595,14 @@ async function dirSize(dir, depth=0){
   let t = 0;
   try { for await (const [, h] of dir.entries()) { if (h.kind === 'file') { try { t += (await h.getFile()).size; } catch {} } else if (depth < 4) t += await dirSize(h, depth + 1); } } catch {}
   return t;
+}
+const devTitle = e => {
+  if (e.kind === 'directory') return e.name;
+  return cfg.useMeta && e.meta?.title ? e.meta.title : e.name;
+};
+function devSub(e){
+  const m = e.meta || {}, show = cfg.useMeta && m.title;
+  return [show ? (m.album || m.artist) : '', m.duration ? '⏱ ' + fmtDur(m.duration) : '', fmtSize(e.size || 0), e.mtime ? fmtDate(e.mtime) : ''].filter(Boolean).map(esc).join(' · ');
 }
 function renderRight(){
   const d = S.dev, list = $('#rightList');
@@ -580,12 +624,16 @@ function renderRight(){
     const isTarget = isDir && e.path === cfg.targetFolder.replace(/^\/+|\/+$/g, '');
     return `<div class="row ${d.sel.has(e.name)?'sel':''}" data-dev="${esc(e.name)}">
       ${isDir ? '<span>📁</span>' : `<input type="checkbox" ${d.sel.has(e.name)?'checked':''} ${prot?'disabled':''}>`}
-      <div class="tx"><div class="t">${e.order ? `<span style="color:var(--acc2)">#${e.order}</span> ` : ''}${esc(e.name)}${isTarget ? '<span class="badge">géré</span>' : ''}</div>
-      <div class="s">${isDir ? 'dossier' : fmtSize(e.size || 0) + (e.mtime ? ' · ' + fmtDate(e.mtime) : '')}</div></div>
+      <div class="tx"><div class="t">${e.order ? `<span style="color:var(--acc2)">#${e.order}</span> ` : ''}${esc(devTitle(e))}${isTarget ? '<span class="badge">géré</span>' : ''}</div>
+      <div class="s">${isDir ? 'dossier' : devSub(e)}</div></div>
+      ${!isDir && AUDIO_EXT.includes(extOf(e.name)) ? `<button class="ghost info" data-devinfo="${esc(e.name)}" title="Détails">ⓘ</button>` : ''}
       <span class="lock ${prot?'on':''}" data-lock="${esc(e.path)}" title="Protéger (ne jamais toucher)">${prot ? '🔒' : '🔓'}</span></div>`;
   }).join('');
   const free = 7.3e9 - d.used; // ~7,3 Go utilisables sur 8 Go
-  $('#rightInfo').textContent = `Utilisé ${fmtSize(d.used)} · libre ≈ ${fmtSize(Math.max(0, free))}` + (d.sel.size ? ` · ${d.sel.size} sél.` : '');
+  const durOf = es => es.reduce((a, e) => a + (e.meta?.duration || 0), 0);
+  const selE = d.entries.filter(e => d.sel.has(e.name)), dirDur = durOf(d.entries), selDur = durOf(selE);
+  $('#rightInfo').textContent = (d.sel.size ? `${d.sel.size} sél.${selDur ? ' · ⏱ ' + fmtDur(selDur) : ''} · ` : dirDur ? `⏱ ${fmtDur(dirDur)} ici · ` : '')
+    + `utilisé ${fmtSize(d.used)} · libre ≈ ${fmtSize(Math.max(0, free))}`;
 }
 
 /* ---------------- manifeste du dossier géré ---------------- */
@@ -636,7 +684,8 @@ async function deviceTargetState(){
 function deviceItem(m, st){
   const f = st.present.get(m.name);
   const pf = S.files.find(x => x.id === m.key);
-  return { key: m.key, base: m.base, title: pf ? fTitle(pf) : baseOf(stripPrefix(m.name)), sub: 'sur le casque', dur: m.dur || pf?.meta?.duration || 0, size: f?.size || m.size || 0, mtime: f?.mtime || 0, origin: 'device', devName: m.name, getFile: () => f.handle.getFile() };
+  const dm = metaCache?.['dev:' + S.dev.handle.name + ':' + joinPath(st.tpath, m.name)]?.m;
+  return { key: m.key, base: m.base, title: pf ? fTitle(pf) : (cfg.useMeta && dm?.title) || baseOf(stripPrefix(m.name)), sub: 'sur le casque', dur: m.dur || pf?.meta?.duration || dm?.duration || 0, size: f?.size || m.size || 0, mtime: f?.mtime || 0, origin: 'device', devName: m.name, getFile: () => f.handle.getFile() };
 }
 
 /* ---------- dialogue de préparation (ordre d'écoute modifiable) ---------- */
@@ -1094,6 +1143,7 @@ $('#leftList').onclick = e => {
   const id = r.dataset.id; S.sel.has(id) ? S.sel.delete(id) : S.sel.add(id); renderLeft();
 };
 $('#rightList').onclick = async e => {
+  const inf = e.target.closest('[data-devinfo]'); if (inf) return openDevInfo(inf.dataset.devinfo);
   const lock = e.target.dataset.lock;
   if (lock !== undefined) {
     if (isProtected(lock)) { cfg.protected = cfg.protected.filter(p => p.replace(/^\/+|\/+$/g, '').toLowerCase() !== lock.toLowerCase()); if (isProtected(lock)) toast('Protégé par un motif : modifie-le dans les réglages'); }
@@ -1141,7 +1191,8 @@ async function demoSetup(){
   await mk('telephone/YouTube/2026-11-20 - Conférence natation.mp3', 400000, { TIT2: 'Conférence : nager plus vite', TPE1: 'Fédération de natation', TDRC: '2026-11-20', TLEN: 3720000 });
   await mk('telephone/YouTube/2026-11-22 - Technique crawl.mp3', 150000, { TIT2: 'Technique de crawl en 10 minutes', TPE1: 'Natation Pro', TDRC: '2026-11-22', TLEN: 612000 });
   await mk('casque/Musique/chanson.mp3', 100000);
-  await mk('casque/vieux_podcast.mp3', 120000);
+  await mk('casque/vieux_podcast.mp3', 120000, T('Un vieux podcast gardé', 'Archives', '2025-06-01', 33));
+  await mk('casque/sans_tags.mp3', 50000);
   localStorage.setItem('swimsync.demo2', '1');
 }
 async function demoPick(purpose){
