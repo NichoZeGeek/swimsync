@@ -1,5 +1,5 @@
 // SwimSync – service worker : permet d'utiliser l'appli hors connexion
-const CACHE = 'swimsync-v1';
+const CACHE = 'swimsync-v2';
 const FILES = ['./', './index.html', './manifest.json', './icon.svg'];
 self.addEventListener('install', e => { e.waitUntil(caches.open(CACHE).then(c => c.addAll(FILES))); self.skipWaiting(); });
 self.addEventListener('activate', e => {

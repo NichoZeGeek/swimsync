@@ -40,6 +40,7 @@ main{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:6px;min-h
 .row.sel{background:var(--sel)}
 .row .tx{flex:1;min-width:0}
 .row .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#leftList .row .t{white-space:normal;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;word-break:break-word}
 .row .s{color:var(--mut);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .row input[type=checkbox]{width:18px;height:18px;flex:none;accent-color:var(--acc)}
 .grp{padding:5px 8px;background:#092537;color:var(--acc2);font-size:12px;font-weight:600;position:sticky;top:0;display:flex;gap:6px;align-items:center;z-index:1}
@@ -54,6 +55,7 @@ main{flex:1;display:grid;grid-template-columns:1fr 1fr;gap:6px;padding:6px;min-h
 .crumbs{padding:4px 8px;font-size:12px;color:var(--mut);border-bottom:1px solid var(--line);white-space:nowrap;overflow-x:auto}
 .crumbs a{color:var(--acc2);text-decoration:none;cursor:pointer}
 .lock{font-size:15px;opacity:.35;flex:none}
+.row .info{flex:none;color:var(--acc2);font-size:15px;padding:2px 4px}
 .lock.on{opacity:1}
 .badge{font-size:10px;padding:1px 5px;border-radius:6px;background:#244f6b;color:var(--acc2);margin-left:4px}
 .badge.w{background:#5b4310;color:#ffd58a}
@@ -145,7 +147,7 @@ details summary{cursor:pointer;color:var(--acc2);margin:6px 0}
    100 % local : HTML + JS, File System Access API, localStorage, IndexedDB
    ===================================================================== */
 
-const VERSION = '1.0.0';
+const VERSION = '1.1.0';
 const AUDIO_EXT = ['mp3','m4a','aac','ogg','opus','flac','wav','ape','wma'];
 const DEVICE_OK_EXT = ['mp3','flac','wav','ape']; // formats lus par le casque
 const MANIFEST = '_swimsync.json';
@@ -160,6 +162,7 @@ const DEFAULT_CFG = {
   playOrder: 'copy-asc',    // 'copy-asc' | 'copy-desc' | 'name'
   prefix: true,             // préfixe numérique 001 - …
   withPodcastName: true,    // inclure le nom du podcast dans le nom de fichier
+  useMeta: true,            // afficher et nommer à partir des métadonnées MP3
   listenOrder: 'oldest',    // 'oldest' | 'newest' | 'podcast'
   defaultDays: 7,           // filtre par défaut (0 = tout)
   groupByPodcast: true,
@@ -221,7 +224,8 @@ const uid = () => Math.random().toString(36).slice(2, 9);
 function safeName(n, max=150){
   let s = n.normalize('NFC').replace(/[\\/:*?"<>|\u0000-\u001f]/g, ' ').replace(/\s+/g, ' ').trim().replace(/[. ]+$/, '');
   const e = extOf(s); let b = e ? s.slice(0, -(e.length+1)) : s;
-  if (b.length > max) b = b.slice(0, max).trim();
+  if (b.length > max) b = b.slice(0, max);
+  b = b.trim().replace(/[. ]+$/, '');
   return (b || 'audio') + (e ? '.' + e : '');
 }
 const stripPrefix = n => n.replace(/^\d{3,4} - /, '');
@@ -235,6 +239,147 @@ function isProtected(path){
   });
 }
 const joinPath = (...a) => a.filter(Boolean).join('/');
+
+/* ---------------- métadonnées MP3 (ID3 + durée) ---------------- */
+const fmtDur = s => { if (!s) return ''; s = Math.round(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60); return h ? `${h} h ${String(m).padStart(2, '0')}` : m ? `${m} min` : `${s} s`; };
+const syncsafe = (b, o) => (b[o] & 127) << 21 | (b[o+1] & 127) << 14 | (b[o+2] & 127) << 7 | (b[o+3] & 127);
+const u32 = (b, o) => (b[o] << 24 >>> 0) + (b[o+1] << 16) + (b[o+2] << 8) + b[o+3];
+const V22 = { TT2:'TIT2', TP1:'TPE1', TP2:'TPE2', TAL:'TALB', TYE:'TYER', TDA:'TDAT', COM:'COMM', PIC:'APIC', TLE:'TLEN', TCO:'TCON', ULT:'USLT' };
+function decText(enc, b){
+  let s;
+  if (enc === 0) s = Array.from(b, c => String.fromCharCode(c)).join('');
+  else if (enc === 3) s = new TextDecoder('utf-8').decode(b);
+  else if (enc === 2) s = new TextDecoder('utf-16be').decode(b);
+  else { // UTF-16 avec BOM
+    if (b[0] === 0xFE && b[1] === 0xFF) s = new TextDecoder('utf-16be').decode(b.subarray(2));
+    else if (b[0] === 0xFF && b[1] === 0xFE) s = new TextDecoder('utf-16le').decode(b.subarray(2));
+    else s = new TextDecoder('utf-16le').decode(b);
+  }
+  return s.replace(/\u0000+$/g, '').replace(/\u0000/g, ' / ').trim();
+}
+function termLen(enc, b, from){ // position de fin d'une chaîne terminée par 0
+  if (enc === 1 || enc === 2) { for (let i = from; i + 1 < b.length; i += 2) if (b[i] === 0 && b[i+1] === 0) return i; return b.length; }
+  const i = b.indexOf(0, from); return i < 0 ? b.length : i;
+}
+// Lit les balises ID3v2 + la durée. withCover : extrait aussi la pochette.
+async function readMeta(file, withCover=false){
+  const t = {}; let audioStart = 0;
+  const h = new Uint8Array(await file.slice(0, 10).arrayBuffer());
+  if (h[0] === 0x49 && h[1] === 0x44 && h[2] === 0x33 && h[3] >= 2 && h[3] <= 4) {
+    const ver = h[3], size = syncsafe(h, 6);
+    audioStart = 10 + size + (h[5] & 0x10 ? 10 : 0);
+    const b = new Uint8Array(await file.slice(10, 10 + Math.min(size, withCover ? 8e6 : 2e6)).arrayBuffer());
+    let p = 0;
+    if (ver > 2 && h[5] & 0x40) p += ver === 4 ? syncsafe(b, 0) : u32(b, 0) + 4; // en-tête étendu
+    const hs = ver === 2 ? 6 : 10;
+    while (p + hs <= b.length) {
+      let id = String.fromCharCode(...b.subarray(p, p + (ver === 2 ? 3 : 4)));
+      if (!/^[A-Z0-9]{3,4}$/.test(id)) break;
+      const fs = ver === 2 ? (b[p+3] << 16 | b[p+4] << 8 | b[p+5]) : ver === 4 ? syncsafe(b, p + 4) : u32(b, p + 4);
+      if (fs <= 0 || p + hs + fs > b.length) { if (fs > 0 && id !== 'APIC' && id !== 'PIC') break; p += hs + fs; continue; }
+      if (ver === 2) id = V22[id] || id;
+      const d = b.subarray(p + hs, p + hs + fs);
+      try {
+        if (id[0] === 'T' && id !== 'TXXX') { if (!t[id]) t[id] = decText(d[0], d.subarray(1)); }
+        else if (id === 'TXXX') { const e = d[0], z = termLen(e, d, 1); const k = decText(e, d.subarray(1, z)).toLowerCase(); const v = decText(e, d.subarray(z + (e === 1 || e === 2 ? 2 : 1))); if (/comment|descri|summary|synopsis/.test(k) && v && !t.COMM) t.COMM = v; }
+        else if (id === 'COMM' || id === 'USLT') { const e = d[0], z = termLen(e, d, 4); const txt = decText(e, d.subarray(z + (e === 1 || e === 2 ? 2 : 1))); if (txt && (!t.COMM || txt.length > t.COMM.length)) t.COMM = txt; }
+        else if (id === 'APIC' && withCover && !t.cover) {
+          const e = d[0]; let q, mime;
+          if (ver === 2) { mime = 'image/' + String.fromCharCode(...d.subarray(1, 4)).toLowerCase().replace('jpg', 'jpeg'); q = 4; }
+          else { const z = d.indexOf(0, 1); mime = decText(0, d.subarray(1, z)) || 'image/jpeg'; q = z + 1; }
+          q += 1; q = termLen(e, d, q) + (e === 1 || e === 2 ? 2 : 1);
+          t.cover = URL.createObjectURL(new Blob([d.slice(q)], { type: mime.includes('/') ? mime : 'image/' + mime }));
+        }
+      } catch {}
+      p += hs + fs;
+    }
+  }
+  const m = {
+    title: t.TIT2 || '', artist: t.TPE1 || t.TPE2 || '', album: t.TALB || '', genre: t.TCON || '',
+    comment: (t.COMM || t.TDES || '').slice(0, 4000), date: '', duration: 0, bitrate: 0
+  };
+  const ds = t.TDRL || t.TDRC || t.TYER || '';
+  m.date = /^\d{4}-\d{2}-\d{2}/.test(ds) ? ds.slice(0, 10) : /^\d{4}$/.test(ds) && /^\d{4}$/.test(t.TDAT || '') ? `${ds}-${t.TDAT.slice(2)}-${t.TDAT.slice(0, 2)}` : ds.slice(0, 10);
+  if (+t.TLEN > 0) m.duration = +t.TLEN / 1000;
+  // durée à partir de la première trame MPEG
+  try {
+    if (extOf(file.name) === 'mp3' || audioStart) {
+      const a = new Uint8Array(await file.slice(audioStart, audioStart + 65536).arrayBuffer());
+      for (let i = 0; i + 4 < a.length; i++) {
+        if (a[i] !== 0xFF || (a[i+1] & 0xE0) !== 0xE0) continue;
+        const vb = a[i+1] >> 3 & 3, layer = a[i+1] >> 1 & 3, bi = a[i+2] >> 4, si = a[i+2] >> 2 & 3, ch = a[i+3] >> 6;
+        if (vb === 1 || layer !== 1 || bi === 0 || bi === 15 || si === 3) continue; // couche III uniquement
+        const mp1 = vb === 3;
+        const br = (mp1 ? [0,32,40,48,56,64,80,96,112,128,160,192,224,256,320] : [0,8,16,24,32,40,48,56,64,80,96,112,128,144,160])[bi] * 1000;
+        const sr = [[11025,12000,8000], null, [22050,24000,16000], [44100,48000,32000]][vb][si];
+        const spf = mp1 ? 1152 : 576;
+        const xo = i + 4 + (mp1 ? (ch === 3 ? 17 : 32) : (ch === 3 ? 9 : 17));
+        const tag = String.fromCharCode(...a.subarray(xo, xo + 4)); let frames = 0;
+        if ((tag === 'Xing' || tag === 'Info') && a[xo + 7] & 1) frames = u32(a, xo + 8);
+        else if (String.fromCharCode(...a.subarray(i + 36, i + 40)) === 'VBRI') frames = u32(a, i + 50);
+        m.bitrate = br;
+        const d = frames ? frames * spf / sr : (file.size - audioStart - i) * 8 / br;
+        if (!m.duration || frames) m.duration = d;
+        if (frames) m.bitrate = Math.round((file.size - audioStart) * 8 / d);
+        break;
+      }
+    }
+  } catch {}
+  if (withCover) m.cover = t.cover || '';
+  return m;
+}
+// cache des métadonnées (IndexedDB), clé = id + taille + date
+let metaCache = null, metaSaveT = 0;
+async function loadMetaCache(){ if (!metaCache) metaCache = (await idb.get('metaCache').catch(() => null)) || {}; return metaCache; }
+function saveMetaCache(){ clearTimeout(metaSaveT); metaSaveT = setTimeout(() => idb.set('metaCache', metaCache).catch(() => {}), 1500); }
+let metaRun = 0;
+async function parseAllMeta(){
+  const run = ++metaRun; await loadMetaCache();
+  const todo = [];
+  for (const f of S.files) {
+    const c = metaCache[f.id];
+    if (c && c.size === f.size && c.mtime === f.mtime) applyMeta(f, c.m); else todo.push(f);
+  }
+  renderLeft();
+  let last = Date.now();
+  const worker = async () => {
+    while (todo.length && run === metaRun) {
+      const f = todo.shift();
+      try { const m = await readMeta(await f.handle.getFile()); metaCache[f.id] = { size: f.size, mtime: f.mtime, m }; applyMeta(f, m); }
+      catch { f.meta = {}; }
+      if (Date.now() - last > 400) { last = Date.now(); renderLeft(); }
+    }
+  };
+  await Promise.all([worker(), worker(), worker()]);
+  if (run !== metaRun) return;
+  // ménage : retirer du cache les fichiers disparus
+  const ids = new Set(S.files.map(f => f.id)); for (const k of Object.keys(metaCache)) if (!ids.has(k)) delete metaCache[k];
+  saveMetaCache(); renderLeft();
+}
+function applyMeta(f, m){
+  f.meta = m;
+  const src = cfg.sources.find(s => s.id === f.srcId);
+  if (src?.kind === 'youtube' && m.artist && !f.path.includes('/')) f.podcast = m.artist; // chaîne YouTube
+  f.pub = /^\d{4}-\d{2}-\d{2}$/.test(m.date) ? new Date(m.date + 'T12:00:00').getTime() : 0;
+}
+const fTitle = f => cfg.useMeta && f.meta?.title ? f.meta.title : baseOf(f.name);
+const fShow = f => cfg.useMeta && f.meta?.album ? f.meta.album : f.podcast;
+const fmtPub = t => new Date(t).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: new Date(t).getFullYear() === new Date().getFullYear() ? undefined : '2-digit' });
+async function openInfo(id){
+  const f = S.files.find(x => x.id === id); if (!f) return;
+  let m = {}; try { m = await readMeta(await f.handle.getFile(), true); } catch {}
+  const row = (k, v) => v ? `<tr><td style="color:var(--mut);padding:2px 8px 2px 0;vertical-align:top">${k}</td><td>${esc(v)}</td></tr>` : '';
+  modal(m.title || baseOf(f.name), `
+    <div style="display:flex;gap:10px;align-items:flex-start;flex-wrap:wrap">
+      ${m.cover ? `<img src="${m.cover}" style="width:110px;height:110px;object-fit:cover;border-radius:8px">` : ''}
+      <table style="flex:1;min-width:200px;font-size:12px">
+        ${row('Podcast', m.album)}${row('Auteur', m.artist)}${row('Publié', m.date ? (f.pub ? fmtPub(f.pub) : m.date) : '')}
+        ${row('Durée', fmtDur(m.duration))}${row('Débit', m.bitrate ? Math.round(m.bitrate / 1000) + ' kb/s' : '')}${row('Taille', fmtSize(f.size))}
+        ${row('Téléchargé', new Date(f.mtime).toLocaleString('fr-FR'))}${row('Dossier', srcName(f.srcId) + '/' + f.path)}${row('Genre', m.genre)}
+      </table></div>
+    ${m.comment ? `<div style="margin-top:10px;white-space:pre-wrap;color:#cfe8f5;font-size:12px">${esc(m.comment.replace(/<[^>]+>/g, ' ').replace(/[ \t]+/g, ' '))}</div>` : '<p style="color:var(--mut)">Pas de description dans le fichier.</p>'}`,
+    [[S.sel.has(id) ? 'Désélectionner' : 'Sélectionner', () => { S.sel.has(id) ? S.sel.delete(id) : S.sel.add(id); renderLeft(); closeModal(); }], ['Fermer', closeModal, 'pri']]);
+}
 
 /* ---------------- accès aux dossiers ---------------- */
 async function pickDirectory(purpose){
@@ -303,6 +448,7 @@ async function scanSources(){
   S.files = out;
   for (const id of [...S.sel]) if (!out.find(f => f.id === id)) S.sel.delete(id);
   renderBanner(); renderLeft();
+  parseAllMeta();
 }
 const srcName = id => cfg.sources.find(s => s.id === id)?.name || '?';
 
@@ -314,14 +460,17 @@ function renderDayChips(){
 function visibleFiles(){
   const lim = S.days ? Date.now() - S.days * 864e5 : 0;
   const q = S.search.toLowerCase();
-  let v = S.files.filter(f => f.mtime >= lim && (!S.srcFilter || f.srcId === S.srcFilter) && (!q || (f.name + ' ' + f.podcast).toLowerCase().includes(q)));
+  let v = S.files.filter(f => f.mtime >= lim && (!S.srcFilter || f.srcId === S.srcFilter) && (!q || [f.name, f.podcast, f.meta?.title, f.meta?.album, f.meta?.artist, f.meta?.comment].join(' ').toLowerCase().includes(q)));
   v.sort((a, b) => b.mtime - a.mtime);
   return v;
 }
 function fileRow(f){
   const warn = DEVICE_OK_EXT.includes(extOf(f.name)) ? '' : `<span class="badge w" title="Format non lu par le casque">${extOf(f.name)}</span>`;
+  const m = f.meta || {};
+  const bits = [cfg.groupByPodcast ? '' : esc(fShow(f)), m.duration ? '⏱ ' + fmtDur(m.duration) : '', f.pub ? fmtPub(f.pub) : '', '⬇ ' + fmtDate(f.mtime)].filter(Boolean);
   return `<div class="row ${S.sel.has(f.id)?'sel':''}" data-id="${esc(f.id)}"><input type="checkbox" ${S.sel.has(f.id)?'checked':''}>
-    <div class="tx"><div class="t">${esc(baseOf(f.name))}${warn}</div><div class="s">${cfg.groupByPodcast?'':esc(f.podcast)+' · '}${fmtDate(f.mtime)} · ${fmtSize(f.size)}</div></div></div>`;
+    <div class="tx"><div class="t">${esc(fTitle(f))}${warn}</div><div class="s">${bits.join(' · ')}</div></div>
+    <button class="ghost info" data-info="${esc(f.id)}" title="Détails">ⓘ</button></div>`;
 }
 function renderLeft(){
   renderDayChips();
@@ -342,7 +491,8 @@ function renderLeft(){
     } else list.innerHTML = v.map(fileRow).join('');
   }
   const selFiles = S.files.filter(f => S.sel.has(f.id));
-  $('#leftInfo').textContent = selFiles.length ? `${selFiles.length} sélectionné(s) · ${fmtSize(selFiles.reduce((a, f) => a + f.size, 0))}` : `${visibleFiles().length} fichier(s)`;
+  const selDur = selFiles.reduce((a, f) => a + (f.meta?.duration || 0), 0);
+  $('#leftInfo').textContent = selFiles.length ? `${selFiles.length} sél. · ${selDur ? '⏱ ' + fmtDur(selDur) + ' · ' : ''}${fmtSize(selFiles.reduce((a, f) => a + f.size, 0))}` : `${visibleFiles().length} fichier(s)`;
 }
 function renderBanner(){
   const b = $('#banner');
@@ -457,8 +607,10 @@ function prefixNum(copyIdx){ return cfg.playOrder === 'copy-desc' ? String(999 -
 /* ---------------- planification des transferts ---------------- */
 function phoneItem(f){
   const isYT = cfg.sources.find(s => s.id === f.srcId)?.kind === 'youtube';
-  const base = safeName(cfg.withPodcastName && !isYT && f.podcast && !f.name.toLowerCase().includes(f.podcast.toLowerCase().slice(0, 12)) ? `${f.podcast} - ${f.name}` : f.name);
-  return { key: f.id, base, title: baseOf(f.name), sub: f.podcast + ' · ' + fmtDate(f.mtime), size: f.size, mtime: f.mtime, origin: 'phone', getFile: () => f.handle.getFile() };
+  const show = isYT ? '' : fShow(f), title = fTitle(f), ext = extOf(f.name);
+  const nm = cfg.useMeta && f.meta?.title ? `${title}.${ext}` : f.name;
+  const base = safeName(cfg.withPodcastName && show && !nm.toLowerCase().includes(show.toLowerCase().slice(0, 12)) ? `${show} - ${nm}` : nm);
+  return { key: f.id, base, title, sub: fShow(f) + (f.pub ? ' · publié ' + fmtPub(f.pub) : ' · ' + fmtDate(f.mtime)), size: f.size, mtime: f.pub || f.mtime, dur: f.meta?.duration || 0, origin: 'phone', getFile: () => f.handle.getFile() };
 }
 function sortListen(items){
   const o = cfg.listenOrder;
@@ -483,7 +635,8 @@ async function deviceTargetState(){
 }
 function deviceItem(m, st){
   const f = st.present.get(m.name);
-  return { key: m.key, base: m.base, title: baseOf(stripPrefix(m.name)), sub: 'sur le casque', size: f?.size || m.size || 0, mtime: f?.mtime || 0, origin: 'device', devName: m.name, getFile: () => f.handle.getFile() };
+  const pf = S.files.find(x => x.id === m.key);
+  return { key: m.key, base: m.base, title: pf ? fTitle(pf) : baseOf(stripPrefix(m.name)), sub: 'sur le casque', dur: m.dur || pf?.meta?.duration || 0, size: f?.size || m.size || 0, mtime: f?.mtime || 0, origin: 'device', devName: m.name, getFile: () => f.handle.getFile() };
 }
 
 /* ---------- dialogue de préparation (ordre d'écoute modifiable) ---------- */
@@ -509,7 +662,7 @@ async function openPlan(mode){
   }
   const badFmt = newItems.filter(i => !DEVICE_OK_EXT.includes(extOf(i.base)));
   const render = () => {
-    const tot = queue.reduce((a, i) => a + i.size, 0);
+    const tot = queue.reduce((a, i) => a + i.size, 0), dur = queue.reduce((a, i) => a + (i.dur || 0), 0);
     $('#mBody').innerHTML = `
       <div class="note">Dossier du casque : <b>/${esc(st.tpath || '')}</b> · ordre de lecture du casque : <b>${playOrderLabel()}</b>.
       Réordonne avec ↑ ↓ : <b>n°1 = premier écouté</b>.</div>
@@ -517,12 +670,12 @@ async function openPlan(mode){
       ${mode === 'sync' ? `<div class="plan">${toDelete.length ? `<b class="d">${toDelete.length} à supprimer</b> du casque : ${toDelete.map(esc).join(', ')}` : '<b class="k">Rien à supprimer.</b>'}</div>` : ''}
       ${st.unmanaged.length && mode === 'append' ? `<div class="note">${st.unmanaged.length} autre(s) fichier(s) déjà présents dans ce dossier ne seront pas modifiés.</div>` : ''}
       <ul class="q">${queue.map((it, i) => `<li class="${it.origin === 'device' ? 'dev' : ''}"><span class="n">${i + 1}</span>
-        <div class="tx"><div class="t">${esc(it.title)}</div><div class="s" style="color:var(--mut);font-size:11px">${esc(it.sub)} · ${fmtSize(it.size)}</div></div>
+        <div class="tx"><div class="t">${esc(it.title)}</div><div class="s" style="color:var(--mut);font-size:11px">${esc(it.sub)}${it.dur ? ' · ⏱ ' + fmtDur(it.dur) : ''} · ${fmtSize(it.size)}</div></div>
         <button class="ghost" data-mv="${i}" data-d="-1" ${i ? '' : 'disabled'}>↑</button><button class="ghost" data-mv="${i}" data-d="1" ${i < queue.length - 1 ? '' : 'disabled'}>↓</button>
         <button class="ghost" data-rm="${i}" title="Retirer">✕</button></li>`).join('') || '<li>File vide.</li>'}</ul>
       <div class="field"><label><input type="checkbox" id="optForce"> Tout réécrire dans l'ordre (plus long, ordre garanti)</label>
       <div class="hint">L'appli réécrit automatiquement tout le dossier quand c'est nécessaire pour respecter l'ordre (réorganisation, suppression).</div></div>
-      <p style="color:var(--mut)">Total : ${queue.length} fichier(s), ${fmtSize(tot)}</p>`;
+      <p style="color:var(--mut)">Total : ${queue.length} fichier(s)${dur ? ', ⏱ ' + fmtDur(dur) : ''}, ${fmtSize(tot)}</p>`;
   };
   modal(mode === 'sync' ? '⇄ Synchroniser le casque' : 'Téléphone ➜ Casque', '', [
     ['Annuler', closeModal],
@@ -605,7 +758,7 @@ async function runTransfer(queue, toDelete, st, force){
       prog.step(`Copie ${i + 1}/${toCopy.length} : ${it.title}`);
       const file = await it.getFile();
       await copyStream(file, dir, name, n => prog.add(n), ctl.signal);
-      man.order.push({ key: it.key, base: it.base, name, size: file.size });
+      man.order.push({ key: it.key, base: it.base, name, size: file.size, dur: it.dur || 0 });
       man.updated = new Date().toISOString();
       if (i % 5 === 4) await writeManifest(man); // sauvegarde régulière
     }
@@ -829,7 +982,8 @@ function openSettings(){
       <option value="name" ${cfg.playOrder==='name'?'selected':''}>Ordre alphabétique des noms</option></select>
       <button id="sTest" style="margin-top:5px">🔊 Tester mon casque</button></div>
     <div class="field"><label><input type="checkbox" id="sPrefix" ${cfg.prefix?'checked':''}> Préfixer les fichiers par un numéro (001 - …)</label>
-      <label><input type="checkbox" id="sPodName" ${cfg.withPodcastName?'checked':''}> Ajouter le nom du podcast au nom du fichier</label></div>
+      <label><input type="checkbox" id="sPodName" ${cfg.withPodcastName?'checked':''}> Ajouter le nom du podcast au nom du fichier</label>
+      <label><input type="checkbox" id="sMeta" ${cfg.useMeta?'checked':''}> Utiliser les métadonnées MP3 (titre, podcast) pour l'affichage et les noms de fichiers</label></div>
     <div class="field"><label>Fichiers protégés sur le casque (un par ligne, chemin depuis la racine, * autorisé)</label>
       <textarea id="sProt" rows="4" style="width:100%" placeholder="Musique&#10;*.flac&#10;PODCASTS/favori.mp3">${esc(cfg.protected.join('\n'))}</textarea>
       <div class="hint">Astuce : touche 🔓 à côté d'un fichier ou dossier du casque pour le protéger.</div></div>
@@ -860,10 +1014,10 @@ function openSettings(){
 function saveSettingsForm(){
   if (!$('#sTarget')) return;
   cfg.targetFolder = $('#sTarget').value.trim().replace(/^\/+|\/+$/g, '');
-  cfg.playOrder = $('#sOrder').value; cfg.prefix = $('#sPrefix').checked; cfg.withPodcastName = $('#sPodName').checked;
+  cfg.playOrder = $('#sOrder').value; cfg.prefix = $('#sPrefix').checked; cfg.withPodcastName = $('#sPodName').checked; cfg.useMeta = $('#sMeta').checked;
   cfg.protected = $('#sProt').value.split('\n').map(s => s.trim()).filter(Boolean);
   cfg.listenOrder = $('#sListen').value; cfg.defaultDays = +$('#sDays').value;
-  saveCfg(); renderRight();
+  saveCfg(); renderRight(); renderLeft();
 }
 function exportCfg(){
   const data = { app: 'SwimSync', version: VERSION, exported: new Date().toISOString(), cfg };
@@ -933,6 +1087,7 @@ $('#btnAddSource').onclick = addSource;
 $('#btnSelAll').onclick = () => { visibleFiles().forEach(f => S.sel.add(f.id)); renderLeft(); };
 $('#btnSelNone').onclick = () => { S.sel.clear(); renderLeft(); };
 $('#leftList').onclick = e => {
+  const inf = e.target.closest('[data-info]'); if (inf) return openInfo(inf.dataset.info);
   const g = e.target.closest('.grp');
   if (g) { const fs = visibleFiles().filter(f => f.podcast === g.dataset.grp); const all = fs.every(f => S.sel.has(f.id)); fs.forEach(f => all ? S.sel.delete(f.id) : S.sel.add(f.id)); renderLeft(); return; }
   const r = e.target.closest('.row'); if (!r) return;
@@ -967,19 +1122,27 @@ document.addEventListener('visibilitychange', () => { if (!document.hidden) { ch
 async function demoRoot(){ return (await navigator.storage.getDirectory()).getDirectoryHandle('demo', { create: true }); }
 async function demoSetup(){
   const root = await demoRoot();
-  if (localStorage.getItem('swimsync.demo')) return;
-  const mk = async (path, size) => { const parts = path.split('/'); const n = parts.pop(); const d = await getDir(root, parts.join('/'), true);
-    const w = await (await d.getFileHandle(n, { create: true })).createWritable(); await w.write(new Uint8Array(size).fill(65)); await w.close(); };
-  await mk('telephone/podcast/Les Couilles sur la table/Episode 101 - Le corps.mp3', 300000);
-  await mk('telephone/podcast/Les Couilles sur la table/Episode 102 - La force.mp3', 250000);
-  await mk('telephone/podcast/La Méthode scientifique/Les abysses.mp3', 200000);
-  await mk('telephone/podcast/La Méthode scientifique/Le sommeil.m4a', 180000);
-  await mk('telephone/podcast/Affaires sensibles/Le Concorde.mp3', 320000);
-  await mk('telephone/YouTube/2026-11-20 - Conférence natation.mp3', 400000);
-  await mk('telephone/YouTube/2026-11-22 - Technique crawl.mp3', 150000);
+  if (localStorage.getItem('swimsync.demo2')) return;
+  const id3 = t => { // petite balise ID3v2.3 (UTF-8 non standard évité : ISO-8859-1 via UTF-16)
+    const u16 = x => { const a = [0xFF, 0xFE]; for (const c of x) { const n = c.charCodeAt(0); a.push(n & 255, n >> 8); } return a; };
+    const fr = (id, d) => [...id].map(c => c.charCodeAt(0)).concat([d.length >>> 24, d.length >> 16 & 255, d.length >> 8 & 255, d.length & 255, 0, 0], d);
+    let body = [];
+    for (const [k, v] of Object.entries(t)) body = body.concat(k === 'COMM' ? fr('COMM', [1, 0x66, 0x72, 0x61, 0xFF, 0xFE, 0, 0, ...u16(v)]) : fr(k, [1, ...u16(String(v))]));
+    const n = body.length; return new Uint8Array([0x49, 0x44, 0x33, 3, 0, 0, n >> 21 & 127, n >> 14 & 127, n >> 7 & 127, n & 127, ...body]);
+  };
+  const mk = async (path, size, tags) => { const parts = path.split('/'); const n = parts.pop(); const d = await getDir(root, parts.join('/'), true);
+    const w = await (await d.getFileHandle(n, { create: true })).createWritable(); if (tags) await w.write(id3(tags)); await w.write(new Uint8Array(size).fill(65)); await w.close(); };
+  const T = (title, album, date, min, desc) => ({ TIT2: title, TALB: album, TPE1: 'Radio', TDRC: date, TLEN: min * 60000, COMM: desc || 'Description de l\'épisode « ' + title + ' ».' });
+  await mk('telephone/podcast/Les Couilles sur la table/lcslt_101.mp3', 300000, T('Le corps des hommes', 'Les Couilles sur la table', '2026-11-12', 52));
+  await mk('telephone/podcast/Les Couilles sur la table/lcslt_102.mp3', 250000, T('La force, un mythe ?', 'Les Couilles sur la table', '2026-11-19', 47));
+  await mk('telephone/podcast/La Méthode scientifique/LMS-2026-11-17.mp3', 200000, T('Les abysses', 'La Méthode scientifique', '2026-11-17', 58));
+  await mk('telephone/podcast/La Méthode scientifique/LMS-2026-11-18.m4a', 180000);
+  await mk('telephone/podcast/Affaires sensibles/as_concorde.mp3', 320000, T('Le Concorde, la chute', 'Affaires sensibles', '2026-11-21', 55));
+  await mk('telephone/YouTube/2026-11-20 - Conférence natation.mp3', 400000, { TIT2: 'Conférence : nager plus vite', TPE1: 'Fédération de natation', TDRC: '2026-11-20', TLEN: 3720000 });
+  await mk('telephone/YouTube/2026-11-22 - Technique crawl.mp3', 150000, { TIT2: 'Technique de crawl en 10 minutes', TPE1: 'Natation Pro', TDRC: '2026-11-22', TLEN: 612000 });
   await mk('casque/Musique/chanson.mp3', 100000);
   await mk('casque/vieux_podcast.mp3', 120000);
-  localStorage.setItem('swimsync.demo', '1');
+  localStorage.setItem('swimsync.demo2', '1');
 }
 async function demoPick(purpose){
   const root = await demoRoot();
